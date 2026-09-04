@@ -35,37 +35,69 @@ function applyChrome(){
   document.documentElement.dataset.theme = S.theme;
   window.LANG = S.lang;
   $('#lang-select').value = S.lang;
-  $('#brand-name').textContent = 'MedHub';
-  $('#brand-tag').textContent = t('tagline');
   $('#global-search').placeholder = t('search_placeholder');
-  $('#disclaimer-short').textContent = t('disclaimer');
   $('.small-print').textContent = t('disclaimer');
   $('#theme-btn').textContent = S.theme==='light'?'🌙':S.theme==='dark'?'☀️':'🔴';
-  const gb = $('#group-badge');
-  if (S.group){ gb.textContent = '👥 ' + S.group.name + ' · ' + S.group.code; gb.classList.remove('hidden'); }
-  else gb.classList.add('hidden');
-  buildNav();
+  buildDock();
 }
 let currentRoute = 'grades';
-function buildNav(){
-  const groups = [
-    {icon:'🎓', label:t('nav_academy'), items:[['grades',t('nav_grades')],['calendar',t('nav_calendar')],['materials',t('nav_materials')],['errors',t('nav_errors')]]},
-    {icon:'🧭', label:t('nav_search'), items:[['search',t('nav_search')]]},
-    {icon:'📖', label:t('nav_ref'), items:[['icd',t('nav_icd')],['drugs',t('nav_drugs')],['labs',t('nav_labs')],['protocols',t('nav_protocols')],['calcs',t('nav_calc')]]},
-    {icon:'🫀', label:t('nav_sims'), items:[['pain',t('nav_pain')],['auscult',t('nav_auscult')],['ecg',t('nav_ecg')],['atlas',t('nav_atlas')]]},
-    {icon:'🧠', label:t('nav_train'), items:[['patient',t('nav_patient')],['tests',t('nav_tests')],['cards',t('nav_cards')]]},
-    {icon:'📔', label:t('nav_diary'), items:[['curation',t('nav_curation')],['skills',t('nav_skills')],['ops',t('nav_ops')],['cases',t('nav_cases')],['reflect',t('nav_reflect')],['duty',t('nav_duty')]]},
-    {icon:'⚙️', label:t('nav_settings'), items:[['setgroup',t('nav_lang')],['setlook',t('nav_look')],['setdata',t('nav_data')],['setnotif',t('nav_notif')]]}
-  ];
-  $('#nav').innerHTML = groups.map(g=>`
-    <div class="nav-group">
-      <button type="button">${g.icon} <span>${esc(g.label)}</span></button>
-      <div class="items">${g.items.map(([r,l])=>`
-        <button class="nav-item ${r===currentRoute?'active':''}" data-route="${r}"><span class="ico">•</span>${esc(l)}</button>`).join('')}
-      </div>
-    </div>`).join('');
-  $$('#nav .nav-item').forEach(b=>b.onclick=()=>go(b.dataset.route));
+
+/* --- hand-made SVG icons for the dock --- */
+const DOCK_ICONS = {
+ academy:'<path d="M12 4 21 8.5 12 13 3 8.5Z"/><path d="M6.5 10.8V15c0 1.5 2.5 2.8 5.5 2.8s5.5-1.3 5.5-2.8v-4.2"/><path d="M21 8.5v5.5"/>',
+ search:'<circle cx="11" cy="11" r="6.2"/><path d="m15.8 15.8 5 5"/>',
+ ref:'<path d="M5.5 5A2.5 2.5 0 0 1 8 2.5h10.5V19H8A2.5 2.5 0 0 0 5.5 21.5Z"/><path d="M5.5 19V5"/><path d="M12 6.5v6M9 9.5h6"/>',
+ sims:'<path d="M12 20.5S4.6 16.2 2.9 11.6C1.7 8.3 3.8 5.2 7 5.2c2 0 3.7 1 5 2.7C13.3 6.2 15 5.2 17 5.2c3.2 0 5.3 3.1 4.1 6.4C19.4 16.2 12 20.5 12 20.5Z"/><path d="M6.2 11.5h2.6l1.4-2.7 2.9 5.6 1.4-2.9h3.3"/>',
+ train:'<path d="M9.3 3.8a2.6 2.6 0 0 0-2.6 2.6v.5a2.8 2.8 0 0 0-2 2.7c0 .7.3 1.4.7 1.9a2.9 2.9 0 0 0-.6 1.8 2.9 2.9 0 0 0 1.9 2.7 2.7 2.7 0 0 0 2.6 2.3c1 0 1.9-.5 2.4-1.3V5.1a2.6 2.6 0 0 0-2.4-1.3Z"/><path d="M14.7 3.8a2.6 2.6 0 0 1 2.6 2.6v.5a2.8 2.8 0 0 1 2 2.7c0 .7-.3 1.4-.7 1.9a2.9 2.9 0 0 1 .6 1.8 2.9 2.9 0 0 1-1.9 2.7 2.7 2.7 0 0 1-2.6 2.3c-1 0-1.9-.5-2.4-1.3V5.1a2.6 2.6 0 0 1 2.4-1.3Z"/><path d="M12 5.1v13.6"/>',
+ diary:'<rect x="5" y="3" width="14.5" height="18" rx="2.2"/><path d="M9.2 3v18"/><path d="M13 8.2h3.4M13 12h3.4"/>',
+ set:'<path d="M4 7.2h8.6M16.4 7.2H20M4 12h2.6M10.4 12H20M4 16.8h10.6M18.4 16.8H20"/><circle cx="14.5" cy="7.2" r="1.9"/><circle cx="8.5" cy="12" r="1.9"/><circle cx="16.5" cy="16.8" r="1.9"/>'
+};
+const DOCK = [
+ {key:'academy', lbl:{ru:'Учёба', uz:'O‘quv', en:'Study'}, icon:'academy', first:'grades',
+  items:[['grades','nav_grades'],['calendar','nav_calendar'],['materials','nav_materials'],['errors','nav_errors']]},
+ {key:'search', lbl:{ru:'Поиск', uz:'Qidiruv', en:'Search'}, icon:'search', first:'search',
+  items:[['search','nav_search']]},
+ {key:'ref', lbl:{ru:'Справка', uz:'Ma’lumot', en:'Ref'}, icon:'ref', first:'icd',
+  items:[['icd','nav_icd'],['drugs','nav_drugs'],['labs','nav_labs'],['protocols','nav_protocols'],['calcs','nav_calc']]},
+ {key:'sims', lbl:{ru:'Симуляторы', uz:'Simulyator', en:'Sims'}, icon:'sims', first:'pain',
+  items:[['pain','nav_pain'],['auscult','nav_auscult'],['ecg','nav_ecg'],['atlas','nav_atlas']]},
+ {key:'train', lbl:{ru:'Тренажёры', uz:'Mashqlar', en:'Trainers'}, icon:'train', first:'patient',
+  items:[['patient','nav_patient'],['tests','nav_tests'],['cards','nav_cards']]},
+ {key:'diary', lbl:{ru:'Дневник', uz:'Kundalik', en:'Diary'}, icon:'diary', first:'curation',
+  items:[['curation','nav_curation'],['skills','nav_skills'],['ops','nav_ops'],['cases','nav_cases'],['reflect','nav_reflect'],['duty','nav_duty']]},
+ {key:'set', lbl:{ru:'Опции', uz:'Sozlash', en:'Options'}, icon:'set', first:'setgroup',
+  items:[['setgroup','nav_lang'],['setlook','nav_look'],['setdata','nav_data'],['setnotif','nav_notif']]}
+];
+function buildDock(){
+  const dock = $('#dock'); if (!dock) return;
+  const cur = DOCK.find(d=>d.items.some(([r])=>r===currentRoute));
+  dock.innerHTML = DOCK.map(d=>`
+    <button class="dock-btn ${cur&&cur.key===d.key?'active':''}" data-dept="${d.key}" aria-label="${esc(d.lbl[window.LANG]||d.lbl.ru)}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${DOCK_ICONS[d.icon]}</svg>
+      <span>${esc(d.lbl[window.LANG]||d.lbl.ru)}</span>
+    </button>`).join('');
+  dock.querySelectorAll('.dock-btn').forEach(b=>b.onclick=()=>dockTap(b.dataset.dept));
 }
+function dockTap(key){
+  const d = DOCK.find(x=>x.key===key);
+  const sheet = $('#dock-sheet');
+  const inDept = d.items.some(([r])=>r===currentRoute);
+  if (inDept && sheet && !sheet.classList.contains('hidden')){ sheet.classList.add('hidden'); return; }
+  if (!inDept) go(d.first);
+  if (sheet){
+    sheet.innerHTML = d.items.map(([r,l])=>`
+      <button class="dock-item ${r===currentRoute?'on':''}" data-dr="${r}">
+        <span class="di"></span>${esc(t(l))}</button>`).join('');
+    sheet.classList.remove('hidden');
+    sheet.querySelectorAll('.dock-item').forEach(b=>b.onclick=()=>{ sheet.classList.add('hidden'); go(b.dataset.dr); });
+  }
+}
+document.addEventListener('click', e=>{
+  const sheet = $('#dock-sheet');
+  if (sheet && !sheet.classList.contains('hidden') && !e.target.closest('#dock') && !e.target.closest('#dock-sheet'))
+    sheet.classList.add('hidden');
+});
+
 function go(route, arg){
   stopSims();
   currentRoute = route;
@@ -74,7 +106,7 @@ function go(route, arg){
   $('#view').innerHTML = fn ? fn(arg) : '<div class="empty">404</div>';
   $('#view').scrollTop = 0;
   if (fn && fn.after) fn.after(arg);
-  $('#sidebar').classList.remove('open');
+  buildDock();
 }
 function stopSims(){ if (window.ECGRen) ECGRen.stop(); if (window.Ausc) Ausc.stop(); }
 
@@ -97,6 +129,15 @@ const visSelect = (cur='group') => `<label class="f">${t('visibility')}</label>
   <option value="group" ${cur==='group'?'selected':''}>👥 ${t('vis_group')}</option>
   <option value="public" ${cur==='public'?'selected':''}>🌍 ${t('vis_public')}</option></select>`;
 const visIcon = v => v==='private'?'🔒':v==='public'?'🌍':'👥';
+
+/* --- real anatomy mapping for pain zones --- */
+const ZONE_ANAT = {head:'anat_nerves',face:'anat_nerves',eye:'anat_nerves',ear:'anat_nerves',throat:'anat_nerves',neck:'anat_nerves',
+ heart:'anat_heart',chest_l:'anat_resp',chest_r:'anat_resp',breast:'anat_resp',
+ epigastrium:'anat_digestive',ruq:'anat_digestive',luq:'anat_digestive',umbilical:'anat_digestive',rlq:'anat_digestive',llq:'anat_digestive',
+ hypogastrium:'anat_urinary',lowback:'anat_urinary',groin:'anat_urinary',
+ shoulder:'anat_skeleton',elbow:'anat_skeleton',wrist:'anat_skeleton',hand:'anat_skeleton',
+ hip:'anat_skeleton',knee:'anat_skeleton',ankle:'anat_skeleton',foot:'anat_skeleton',skin:'anat_organs'};
+const anatBy = k => window.ANAT_LIB.find(a=>a.k===k);
 
 /* =========================================================
    ROUTES
@@ -581,15 +622,28 @@ ROUTES.pain = function(){
   <div class="sim-layout">
     <div class="bodymap-wrap" id="pain-svg"></div>
     <div id="pain-info"><div class="empty">${t('pain_hint')}</div></div>
+  </div>
+  <div class="card"><h3>🫀 3D-анатомия</h3>
+    <p class="muted" style="font-size:.84rem;margin-top:0">Реальные 3D-модели человека и внутренностей — нажмите, чтобы увеличить.</p>
+    <div class="anat-grid">${window.ANAT_LIB.map(a=>`
+      <figure class="anat-fig" data-anat="${a.k}"><img src="${a.f}" alt="${esc(a.l)}" loading="lazy"><figcaption>${esc(a.l)}</figcaption></figure>`).join('')}
+    </div>
   </div>`;
 };
 ROUTES.pain.after = function(){
   $$('#pain-mode .chip').forEach(b=>b.onclick=()=>{ painMode=b.dataset.m; go('pain'); });
-  $('#pain-svg').innerHTML = BodyMap.svg(painMode);
+  $('#pain-svg').innerHTML = BodyMap.html(painMode);
+  $$('#view [data-anat]').forEach(f=>f.onclick=()=>{
+    const a = anatBy(f.dataset.anat);
+    dlg(`<h3>${esc(a.l)}</h3><img src="${a.f}" style="width:100%;border-radius:12px" alt="">
+      <p><button class="btn" data-close>${t('close')}</button></p>`);
+  });
   BodyMap.bind($('#pain-svg'), zid=>{
     const z = window.PAIN_ZONES.find(x=>x.id===zid); if (!z) return;
+    const anat = anatBy(ZONE_ANAT[z.id]);
     $('#pain-info').innerHTML = `<div class="card">
       <h3>${esc(z.n)}</h3>
+      ${anat?`<figure class="anat-fig"><img src="${anat.f}" alt="${esc(anat.l)}" loading="lazy"><figcaption>${esc(anat.l)}</figcaption></figure>`:''}
       <p><b>${t('pain_organs')}:</b> ${esc(z.organs)}</p>
       <p><b>${t('pain_causes')}:</b> ${esc(z.causes)}</p>
       <p><b>${t('pain_irr')}:</b> ${esc(z.irr)}</p>
@@ -615,17 +669,12 @@ ROUTES.auscult = function(){
 };
 ROUTES.auscult.after = function(){
   $$('#ausc-tabs .chip').forEach(b=>b.onclick=()=>{ auscCat=b.dataset.c; Ausc.stop(); go('auscult'); });
-  $('#ausc-svg').innerHTML = BodyMap.svg('male', ()=>{});
-  const svg = $('#ausc-svg svg');
-  svg.querySelectorAll('.zone').forEach(z=>z.remove());
   let markers = '';
   for (const snd of window.SOUNDS){ if (snd.cat!==auscCat) continue;
     for (const p of snd.points){
-      markers += `<g class="ausc-pt" data-sound="${snd.id}" data-p="${esc(p.l)}" role="button" tabindex="0">
-        <circle cx="${p.x+5}" cy="${p.y+5}" r="7" fill="var(--accent2)" opacity=".9" stroke="#fff" stroke-width="1.5"/>
-        <title>${esc(p.l)}</title></g>`; } }
-  svg.insertAdjacentHTML('beforeend', markers);
-  svg.querySelectorAll('.ausc-pt').forEach(el=>{
+      markers += `<button class="ausc-pt" data-sound="${snd.id}" data-p="${esc(p.l)}" style="left:${p.x}%;top:${p.y}%" title="${esc(p.l)}" aria-label="${esc(p.l)}"></button>`; } }
+  $('#ausc-svg').innerHTML = `<div class="body-photo ausc-photo"><img src="img/anat_digestive.jpg" alt="" draggable="false">${markers}</div>`;
+  $('#ausc-svg').querySelectorAll('.ausc-pt').forEach(el=>{
     const pick = ()=>{ const snd = window.SOUNDS.find(s=>s.id===el.dataset.sound);
       Ausc.play(snd.synth);
       $('#ausc-info').innerHTML = `<div class="card">
@@ -650,7 +699,9 @@ ROUTES.ecg = function(){
     ${window.ECGS.map(e=>`<button class="chip" data-e="${e.id}">${esc(e.n)}</button>`).join('')}
     <button class="chip" id="ecg-quiz-start">🎲 ${t('ecg_quiz')}</button>
   </div>
-  <div class="canvas-wrap"><canvas id="ecg-cv"></canvas></div>
+  <div class="canvas-wrap"><canvas id="ecg-cv"></canvas>
+    <div class="ecg-hud" id="ecg-hud"><span class="ecg-heart">❤</span><b>—</b><small>${t('ecg_rate')}</small></div>
+  </div>
   <div class="ecg-controls">
     <button class="btn small secondary" id="ecg-pause">⏸ ${t('ecg_pause')}</button>
   </div>
@@ -661,6 +712,9 @@ ROUTES.ecg.after = function(){
   let paused = false, raf = null;
   const show = r => {
     ECGRen.start(cv, r, S.theme, S.quality==='low'?0.6:1);
+    const hud = $('#ecg-hud');
+    hud.querySelector('b').textContent = r.rate || '--';
+    hud.querySelector('.ecg-heart').style.animationDuration = (r.rate ? (60/r.rate) : 1) + 's';
     $('#ecg-info').innerHTML = `<div class="card">
       <div class="meta"><span class="badge">${esc(r.cat)}</span> <span class="badge">${t('ecg_rate')}: ${r.rate||'—'}</span></div>
       <h3>${esc(r.n)}</h3>
@@ -700,23 +754,41 @@ ROUTES.atlas = function(){
 };
 ROUTES.atlas.after = function(){
   let cat = 'all';
+  const fallback = (imgEl, a, w, h)=>{
+    const cv = document.createElement('canvas'); cv.width=w; cv.height=h;
+    try { ATLAS_DRAW[a.id](cv.getContext('2d'), w, h); } catch(e){}
+    imgEl.replaceWith(cv); return cv;
+  };
   const draw = ()=>{
     const items = window.ATLAS.filter(a=>cat==='all'||a.cat===cat);
     $('#atlas-grid').innerHTML = items.map(a=>`<div class="atlas-item" data-a="${a.id}">
-      <canvas width="440" height="330"></canvas>
+      ${a.img
+        ? `<img src="${a.img}" alt="${esc(a.t)}" loading="lazy">`
+        : `<canvas width="440" height="330"></canvas>`}
       <div class="cap"><div class="cat">${esc(a.cat)}</div>${esc(a.t)}</div></div>`).join('');
     $('#atlas-grid').querySelectorAll('.atlas-item').forEach(el=>{
       const a = window.ATLAS.find(x=>x.id===el.dataset.a);
-      ATLAS_DRAW[a.id](el.querySelector('canvas').getContext('2d'), 440, 330);
-      el.onclick = ()=>dlg(`<h3>${esc(a.t)}</h3><canvas id="ad-cv" width="560" height="400" style="width:100%;background:#0b0e13;border-radius:10px"></canvas>
-        <p><b>${t('atlas_find')}:</b> ${esc(a.find)}</p><p><b>${t('atlas_teach')}:</b> ${esc(a.teach)}</p>
-        <p class="muted" style="font-size:.8rem">${t('atlas_note')}</p>
-        <p><button class="btn" data-close>${t('close')}</button></p>`);
+      if (a.img){
+        const im = el.querySelector('img');
+        im.onerror = ()=>{ im.onerror=null; fallback(im, a, 440, 330); };
+        el.onclick = ()=>dlg(`<h3>${esc(a.t)}</h3>
+          <img src="${a.img}" style="width:100%;border-radius:10px;display:block" alt="">
+          <p><b>${t('atlas_find')}:</b> ${esc(a.find)}</p><p><b>${t('atlas_teach')}:</b> ${esc(a.teach)}</p>
+          <p class="muted" style="font-size:.8rem">${t('atlas_note')}</p>
+          <p><button class="btn" data-close>${t('close')}</button></p>`);
+      } else {
+        ATLAS_DRAW[a.id](el.querySelector('canvas').getContext('2d'), 440, 330);
+        el.onclick = ()=>dlg(`<h3>${esc(a.t)}</h3><canvas id="ad-cv" width="560" height="400" style="width:100%;background:#0b0e13;border-radius:10px"></canvas>
+          <p><b>${t('atlas_find')}:</b> ${esc(a.find)}</p><p><b>${t('atlas_teach')}:</b> ${esc(a.teach)}</p>
+          <p class="muted" style="font-size:.8rem">${t('atlas_note')}</p>
+          <p><button class="btn" data-close>${t('close')}</button></p>`);
+      }
     });
     $('#atlas-grid').querySelectorAll('.atlas-item').forEach(el=>{
-      el.addEventListener('click', ()=>{ // redraw big canvas after dialog opens
+      el.addEventListener('click', ()=>{
         const a = window.ATLAS.find(x=>x.id===el.dataset.a);
-        setTimeout(()=>{ const cv=$('#ad-cv'); if (cv) ATLAS_DRAW[a.id](cv.getContext('2d'),560,400); }, 30); });
+        if (!a.img) setTimeout(()=>{ const cv=$('#ad-cv'); if (cv) ATLAS_DRAW[a.id](cv.getContext('2d'),560,400); }, 30);
+      });
     });
   };
   $$('#atlas-tabs .chip').forEach(b=>b.onclick=()=>{ cat=b.dataset.c;
@@ -780,10 +852,10 @@ ROUTES.patient.after = function(){
       <div id="pt-verdict"></div>
     </div>`;
     $('#pt-sound').onclick = ()=>Ausc.play(window.SOUNDS.find(s=>s.id===c.sound).synth);
-    $('#pt-map').innerHTML = BodyMap.svg('male');
-    const svg = $('#pt-map svg');
-    svg.querySelectorAll('.zone').forEach(z=>{ if (z.dataset.zone!==c.pain) z.remove(); else z.classList.add('sel'); });
-    svg.style.maxWidth='220px';
+    $('#pt-map').innerHTML = BodyMap.html('male');
+    const pmap = $('#pt-map .body-photo');
+    pmap.querySelectorAll('.zone-dot').forEach(z=>{ if (z.dataset.zone!==c.pain) z.remove(); else z.classList.add('sel'); });
+    pmap.classList.add('mini');
     ECGRen.start($('#pt-ecg'), window.ECGS.find(e=>e.id===c.ecg), S.theme, 0.8);
     $('#pt-check').onclick = ()=>{
       S.patient.attempted++;
@@ -1410,7 +1482,6 @@ setInterval(()=>{
 }, 60000);
 
 /* ---------------- boot ---------------- */
-$('#burger').onclick = ()=>$('#sidebar').classList.toggle('open');
 $('#lang-select').onchange = e=>{ S.lang = e.target.value; save(); applyChrome(); go(currentRoute); };
 $('#theme-btn').onclick = ()=>{ S.theme = S.theme==='light'?'dark':S.theme==='dark'?'night':'light'; save(); applyChrome(); go(currentRoute); };
 function globalSearch(){

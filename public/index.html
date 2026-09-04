@@ -9,20 +9,12 @@
 </head>
 <body>
 <div id="app">
-  <aside id="sidebar">
-    <div class="brand">
-      <div class="logo">🩺</div>
-      <div><h1 id="brand-name">MedHub</h1><p id="brand-tag" class="muted">платформа для медиков</p></div>
-    </div>
-    <nav id="nav"></nav>
-    <div class="side-footer muted">
-      <span id="disclaimer-short"></span>
-    </div>
-  </aside>
-
   <div id="main-col">
     <header id="topbar">
-      <button id="burger" class="icon-btn" aria-label="Меню">☰</button>
+      <div class="brand-top">
+        <span class="logo">🩺</span>
+        <b>MedHub</b>
+      </div>
       <div class="search-wrap">
         <input id="global-search" type="search" autocomplete="off" placeholder="">
         <button id="search-go" class="btn small">🔍</button>
@@ -32,13 +24,14 @@
           <option value="ru">RU</option><option value="uz">UZ</option><option value="en">EN</option>
         </select>
         <button id="theme-btn" class="icon-btn" title="Тема">🌙</button>
-        <span id="group-badge" class="badge hidden"></span>
       </div>
     </header>
     <main id="view" tabindex="-1"></main>
     <footer class="muted small-print"></footer>
   </div>
 </div>
+<nav id="dock" aria-label="Разделы"></nav>
+<div id="dock-sheet" class="hidden"></div>
 <div id="toast" class="hidden"></div>
 <canvas id="print-canvas" class="hidden"></canvas>
 

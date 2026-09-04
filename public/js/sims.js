@@ -1,57 +1,21 @@
 /* MedHub — simulators: body map SVG, WebAudio auscultation, ECG renderer, atlas schematics */
 
-/* ================= 1. BODY MAP (SVG) ================= */
+/* ================= 1. BODY MAP (real 3D body photo + zone overlay) ================= */
 window.BodyMap = (function(){
-  function bodyPath(mode){
-  // viewBox 200x440; mode: male | female | child
-  const ch = mode === 'child';
-  const headR = ch ? 30 : 24, headY = ch ? 46 : 38;
-  const hip = mode === 'female' ? 26 : 20;      // half hip width
-  const sh  = ch ? 34 : (mode === 'female' ? 38 : 42); // half shoulder width
-  const torsoTop = headY + headR + 10, pelvisY = torsoTop + 100;
-  const shoulderY = torsoTop + 2;
-  const legTop = pelvisY + 18, legLen = 155, legW = 17;
-  const footY = legTop + legLen, footH = 30;
-  return `
-    <circle cx="100" cy="${headY}" r="${headR}" class="bm-skin"/>
-    <rect x="92" y="${headY+headR-4}" width="16" height="16" rx="6" class="bm-skin"/>
-    <rect x="44" y="${shoulderY}" width="15" height="150" rx="7.5" class="bm-skin"/>
-    <rect x="141" y="${shoulderY}" width="15" height="150" rx="7.5" class="bm-skin"/>
-    <path class="bm-skin" d="M ${100-sh} ${shoulderY}
-      C ${100-sh-6} ${shoulderY+30}, ${100-sh-2} ${pelvisY-26}, ${100-hip} ${pelvisY}
-      L ${100+hip} ${pelvisY}
-      C ${100+sh+2} ${pelvisY-26}, ${100+sh+6} ${shoulderY+30}, ${100+sh} ${shoulderY}
-      Q 100 ${shoulderY-8}, ${100-sh} ${shoulderY} Z"/>
-      ${mode==='female' ? `<path class="bm-skin" d="M 82 ${torsoTop+14} q 8 12 8 25 q 0 8 -8 8 q -8 0 -8 -8 q 0 -13 8 -25 Z M 118 ${torsoTop+14} q -8 12 -8 25 q 0 8 8 8 q 8 0 8 -8 q 0 -13 -8 -25 Z"/>` : ''}
-    <rect x="${100-hip-6}" y="${pelvisY-2}" width="${hip*2+12}" height="26" rx="10" class="bm-skin"/>
-    <rect x="${100-hip+2}" y="${legTop}" width="${legW}" height="${legLen}" rx="8.5" class="bm-skin"/>
-    <rect x="${100+hip-2-legW}" y="${legTop}" width="${legW}" height="${legLen}" rx="8.5" class="bm-skin"/>
-    <rect x="${100-hip+2}" y="${footY}" width="17" height="${footH}" rx="6" class="bm-skin"/>
-    <rect x="${100+hip-2-17}" y="${footY}" width="17" height="${footH}" rx="6" class="bm-skin"/>`;
-}
-function svg(mode, onZone){
-    const modeX = mode==='child' ? 0.9 : 1;
-    let zones = '';
+  const BASE = {male:'img/body_front.png', female:'img/anat_digestive.jpg', child:'img/body_front.png'};
+  function html(mode){
+    const pos = window.PAIN_POS[mode] || window.PAIN_POS.male;
+    let dots = '';
     for (const z of window.PAIN_ZONES){
-      const r = z.id==='skin' ? z.r : z.r*modeX;
-      zones += `<g class="zone" data-zone="${z.id}" role="button" tabindex="0" aria-label="${z.n}">
-        <circle cx="${z.x}" cy="${z.y}" r="${r}" class="zone-hit"/>
-        <circle cx="${z.x}" cy="${z.y}" r="${r}" class="zone-mark"/></g>`;
+      const p = pos[z.id]; if (!p) continue;
+      dots += `<button class="zone-dot" data-zone="${z.id}" style="left:${p[0]}%;top:${p[1]}%" title="${z.n}" aria-label="${z.n}"></button>`;
     }
-    return `<svg viewBox="0 0 210 450" class="bodymap" xmlns="http://www.w3.org/2000/svg">
-      <style>
-        .bm-skin{fill:var(--panel2);stroke:var(--line);stroke-width:1.4}
-        .zone-hit{fill:transparent;stroke:none}
-        .zone-mark{fill:var(--accent);opacity:.28;stroke:var(--accent);stroke-width:1.2;transition:.15s}
-        .zone:hover .zone-mark{opacity:.55}
-        .zone.sel .zone-mark{fill:var(--danger);stroke:var(--danger);opacity:.6;stroke-width:2}
-        .zone.sel .zone-mark{animation:zonepulse 1.4s infinite}
-      </style>${bodyPath(mode)}${zones}</svg>`;
+    return `<div class="body-photo"><img src="${BASE[mode]}" alt="" draggable="false">${dots}</div>`;
   }
   function bind(container, onZone){
-    container.querySelectorAll('.zone').forEach(el=>{
+    container.querySelectorAll('.zone-dot').forEach(el=>{
       const pick = () => {
-        container.querySelectorAll('.zone').forEach(z=>z.classList.remove('sel'));
+        container.querySelectorAll('.zone-dot').forEach(d=>d.classList.remove('sel'));
         el.classList.add('sel');
         onZone(el.dataset.zone);
       };
@@ -59,7 +23,7 @@ function svg(mode, onZone){
       el.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' ') {e.preventDefault();pick();} });
     });
   }
-  return {svg, bind};
+  return {html, bind, BASE};
 })();
 
 /* ================= 2. AUSCULTATION SYNTH (WebAudio) ================= */
@@ -208,7 +172,11 @@ window.ECGRen = (function(){
     for (let x=0;x<W;x+=100){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
     for (let y=0;y<H;y+=100){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
     const p = st.p, y0 = H*0.45, px = 0.09;
-    ctx.strokeStyle = '#e8f5e9'; ctx.lineWidth = 1.8; ctx.beginPath();
+    ctx.strokeStyle = st.theme==='night' ? '#ffd9a8' : '#eafbe9';
+    ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.shadowColor = st.theme==='night' ? 'rgba(255,170,90,.85)' : 'rgba(110,240,160,.85)';
+    ctx.shadowBlur = 9;
+    ctx.beginPath();
     if (p.chaotic){ // VF
       let y = y0;
       for (let x=0;x<W;x+=3){ y = y0 + Math.sin(x*0.08+st.t*8)*mm(4)*Math.sin(x*0.013+st.t*3) + Math.sin(x*0.21-st.t*11)*mm(2.5);
@@ -253,6 +221,7 @@ window.ECGRen = (function(){
       ctx.moveTo(0,y0);
     }
     ctx.stroke();
+    ctx.shadowBlur = 0;
   }
   function start(canvas, rhythm, theme, speed=1){
     stop(); const ctx = canvas.getContext('2d');
