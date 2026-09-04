@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MedHub — платформа для студентов-медиков</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🩺</text></svg>">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <div class="brand">
+      <div class="logo">🩺</div>
+      <div><h1 id="brand-name">MedHub</h1><p id="brand-tag" class="muted">платформа для медиков</p></div>
+    </div>
+    <nav id="nav"></nav>
+    <div class="side-footer muted">
+      <span id="disclaimer-short"></span>
+    </div>
+  </aside>
+
+  <div id="main-col">
+    <header id="topbar">
+      <button id="burger" class="icon-btn" aria-label="Меню">☰</button>
+      <div class="search-wrap">
+        <input id="global-search" type="search" autocomplete="off" placeholder="">
+        <button id="search-go" class="btn small">🔍</button>
+      </div>
+      <div class="top-actions">
+        <select id="lang-select" aria-label="Язык">
+          <option value="ru">RU</option><option value="uz">UZ</option><option value="en">EN</option>
+        </select>
+        <button id="theme-btn" class="icon-btn" title="Тема">🌙</button>
+        <span id="group-badge" class="badge hidden"></span>
+      </div>
+    </header>
+    <main id="view" tabindex="-1"></main>
+    <footer class="muted small-print"></footer>
+  </div>
+</div>
+<div id="toast" class="hidden"></div>
+<canvas id="print-canvas" class="hidden"></canvas>
+
+<script src="js/i18n.js"></script>
+<script src="js/data.js"></script>
+<script src="js/data2.js"></script>
+<script src="js/sims.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
