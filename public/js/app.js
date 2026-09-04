@@ -81,11 +81,10 @@ function buildDock(){
 function dockTap(key){
   const d = DOCK.find(x=>x.key===key);
   const sheet = $('#dock-sheet');
-  const inDept = d.items.some(([r])=>r===currentRoute);
-  if (inDept && sheet && !sheet.classList.contains('hidden')){ sheet.classList.add('hidden'); return; }
-  if (!inDept) go(d.first);
+  if (!d.items.some(([r])=>r===currentRoute)) go(d.first);
   if (sheet){
-    sheet.innerHTML = d.items.map(([r,l])=>`
+    sheet.innerHTML = `<div class="ds-head">${DOCK_ICONS[d.icon] ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${DOCK_ICONS[d.icon]}</svg>`:''}<b>${esc(d.lbl[window.LANG]||d.lbl.ru)}</b></div>` +
+      d.items.map(([r,l])=>`
       <button class="dock-item ${r===currentRoute?'on':''}" data-dr="${r}">
         <span class="di"></span>${esc(t(l))}</button>`).join('');
     sheet.classList.remove('hidden');
@@ -673,7 +672,7 @@ ROUTES.auscult.after = function(){
   for (const snd of window.SOUNDS){ if (snd.cat!==auscCat) continue;
     for (const p of snd.points){
       markers += `<button class="ausc-pt" data-sound="${snd.id}" data-p="${esc(p.l)}" style="left:${p.x}%;top:${p.y}%" title="${esc(p.l)}" aria-label="${esc(p.l)}"></button>`; } }
-  $('#ausc-svg').innerHTML = `<div class="body-photo ausc-photo"><img src="img/anat_digestive.jpg" alt="" draggable="false">${markers}</div>`;
+  $('#ausc-svg').innerHTML = `<div class="body-photo ausc-photo"><img src="img/body_blue.jpg" alt="" draggable="false">${markers}</div>`;
   $('#ausc-svg').querySelectorAll('.ausc-pt').forEach(el=>{
     const pick = ()=>{ const snd = window.SOUNDS.find(s=>s.id===el.dataset.sound);
       Ausc.play(snd.synth);

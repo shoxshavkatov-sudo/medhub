@@ -2,7 +2,7 @@
 
 /* ================= 1. BODY MAP (real 3D body photo + zone overlay) ================= */
 window.BodyMap = (function(){
-  const BASE = {male:'img/body_front.png', female:'img/anat_digestive.jpg', child:'img/body_front.png'};
+  const BASE = {male:'img/body_blue.jpg', female:'img/anat_digestive.jpg', child:'img/body_blue.jpg'};
   function html(mode){
     const pos = window.PAIN_POS[mode] || window.PAIN_POS.male;
     let dots = '';
