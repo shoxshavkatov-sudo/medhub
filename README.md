@@ -61,7 +61,7 @@ npm start          # http://localhost:3000
 `render.yaml` уже настроен на `runtime: static`:
 
 1. https://dashboard.render.com → **New → Blueprint** → выбрать репозиторий
-2. Render возьмёт файлы из `public/` → **Apply**
+2. Render опубликует файлы из корня репозитория → **Apply**
 3. Сайт на `https://medhub.onrender.com`, каждый push в main передеплоивается сам
 
 В статическом режиме всё работает офлайн-механиками: справочники, симуляторы,
