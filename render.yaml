@@ -5,6 +5,15 @@ services:
     buildCommand: mkdir -p dist && cp -R index.html js css img dist/
     staticPublishPath: dist
     headers:
-      - path: /*
+      - path: /
         name: Cache-Control
-        value: public, max-age=3600
+        value: no-cache
+      - path: /js/*
+        name: Cache-Control
+        value: public, max-age=600
+      - path: /css/*
+        name: Cache-Control
+        value: public, max-age=600
+      - path: /img/*
+        name: Cache-Control
+        value: public, max-age=604800
