@@ -2,7 +2,7 @@ services:
   - type: web
     name: medhub
     runtime: static
-    buildCommand: mkdir -p dist && cp -R index.html js css img dist/
+    buildCommand: mkdir -p dist && cp -R index.html js css img vendor dist/
     staticPublishPath: dist
     headers:
       - path: /
