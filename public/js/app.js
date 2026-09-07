@@ -110,7 +110,14 @@ const Store = (function(){
       const r = await fetch('/api'+path, Object.assign({headers:{'Content-Type':'application/json'}}, opts,
         opts && opts.body ? {body: JSON.stringify(opts.body)} : {}));
       const j = await r.json().catch(()=>({error:'bad json'}));
-      if (!r.ok) throw new Error(j.error || r.status);
+      if (!r.ok){
+        // сервер перезапущен с чистыми данными / группу удалили — само-лечимся
+        if (j.error === 'group not found' && typeof S !== 'undefined' && S.group){
+          S.group = null; save(); applyChrome();
+          throw new Error('Группа больше не существует на сервере — создайте новую или войдите по коду');
+        }
+        throw new Error(j.error || r.status);
+      }
       return j;
     }
   };
