@@ -17,6 +17,7 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json({ limit: '8mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+app.get('/api/health', (req, res) => res.json({ok:true, server:true}));
 
 /* ---------- storage ---------- */
 const DB = path.join(__dirname, 'data.json');

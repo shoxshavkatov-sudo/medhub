@@ -56,9 +56,41 @@ npm start          # http://localhost:3000
 
 ## Деплой на Render
 
+### Вариант А — статический сайт (проще всего)
+
+`render.yaml` уже настроен на `runtime: static`:
+
 1. https://dashboard.render.com → **New → Blueprint** → выбрать репозиторий
-2. Render прочитает `render.yaml` (rootDir: MedHub) → **Apply**
-3. Сайт поднимется на `https://medhub.onrender.com`; каждый push в main передеплоится автоматически
+2. Render возьмёт файлы из `public/` → **Apply**
+3. Сайт на `https://medhub.onrender.com`, каждый push в main передеплоивается сам
+
+В статическом режиме всё работает офлайн-механиками: справочники, симуляторы,
+тренажёры, дневник, экспорт — полностью. Группы, общие ленты и облачная
+синхронизация хранятся локально в браузере (приложение само определяет режим
+и пишет об этом в «Настройки → Язык и группа»).
+
+### Вариант Б — Node-версия (группы работают между устройствами)
+
+```bash
+# локально
+npm install && npm start        # http://localhost:3000
+```
+
+На Render: создайте Web Service вручную (Environment: Node,
+Build `npm install`, Start `npm start`) или временно замените `render.yaml`
+на Node-конфигурацию:
+
+```yaml
+services:
+  - type: web
+    name: medhub
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+```
+
+Клиент сам определяет наличие API (`/api/health`) и переключается на серверный режим без изменений в коде.
 
 ## Технологии
 

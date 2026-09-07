@@ -21,13 +21,102 @@ catch { S = Object.assign({}, DEFAULTS); }
 const save = () => localStorage.setItem('medhub', JSON.stringify(S));
 window.LANG = S.lang;
 
-/* ---------------- api ---------------- */
+/* ---------------- api: server, или localStorage в статическом режиме ---------------- */
+const Store = (function(){
+  let staticMode = null;                       // null = ещё определяем
+  const ready = (async () => {
+    try {
+      if (new URLSearchParams(location.search).has('static') || localStorage.getItem('medhub_force_static')){
+        staticMode = true; return;
+      }
+      const r = await fetch('/api/health');
+      staticMode = !(r.ok && (r.headers.get('content-type')||'').includes('json'));
+    } catch { staticMode = true; }
+  })();
+  const L = () => { try { return Object.assign({groups:{},entries:[],sync:{}}, JSON.parse(localStorage.getItem('medhub_local')||'{}')); } catch { return {groups:{},entries:[],sync:{}}; } };
+  const saveL = db => localStorage.setItem('medhub_local', JSON.stringify(db));
+  const uid2 = () => Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+  const pub = g => ({code:g.code, name:g.name, createdAt:g.createdAt, members:g.members.map(m=>({id:m.id,name:m.name,role:m.role}))});
+  function handle(path, opts){
+    const db = L(); const o = opts || {};
+    const body = o.body || {};
+    let m;
+    if (o.method==='POST' && path==='/groups'){
+      if (!body.name || !body.adminName) return Promise.reject(new Error('name and adminName required'));
+      let code; do { code = Array.from(crypto.getRandomValues(new Uint8Array(3))).map(b=>b.toString(16).padStart(2,'0')).join('').toUpperCase(); } while (db.groups[code]);
+      const admin = {id:uid2(), name:body.adminName.slice(0,40), role:'admin'};
+      db.groups[code] = {code, name:body.name.slice(0,60), createdAt:Date.now(), members:[admin], adminKey:uid2()+uid2()};
+      saveL(db);
+      return Promise.resolve({group:pub(db.groups[code]), me:admin, adminKey:db.groups[code].adminKey});
+    }
+    if ((m = path.match(/^\/groups\/([A-Za-z0-9]+)\/join$/)) && o.method==='POST'){
+      const g = db.groups[m[1]]; if (!g) return Promise.reject(new Error('group not found'));
+      if (!body.name) return Promise.reject(new Error('name required'));
+      let me = g.members.find(x=>x.name===body.name);
+      if (!me){ me = {id:uid2(), name:body.name.slice(0,40), role: body.adminKey===g.adminKey?'admin':'student'}; g.members.push(me); saveL(db); }
+      return Promise.resolve({group:pub(g), me});
+    }
+    if ((m = path.match(/^\/groups\/([A-Za-z0-9]+)$/)) && !o.method){
+      const g = db.groups[m[1]]; if (!g) return Promise.reject(new Error('group not found'));
+      return Promise.resolve({group:pub(g)});
+    }
+    if ((m = path.match(/^\/groups\/([A-Za-z0-9]+)\/feed$/))){
+      let list = db.entries.filter(e=>e.group===m[1]);
+      if (o.type) list = list.filter(e=>e.type===o.type);
+      list.sort((a,b)=>b.ts-a.ts);
+      return Promise.resolve({entries:list.slice(0,300)});
+    }
+    if ((m = path.match(/^\/groups\/([A-Za-z0-9]+)\/entries$/)) && o.method==='POST'){
+      const g = db.groups[m[1]]; if (!g) return Promise.reject(new Error('group not found'));
+      if (!g.members.find(x=>x.id===body.authorId)) return Promise.reject(new Error('not a member'));
+      const e = {id:uid2(), group:g.code, type:body.type, ts:Date.now(), authorId:body.authorId,
+        authorName:String(body.authorName||'').slice(0,40), title:String(body.title||'').slice(0,160),
+        body:String(body.body||'').slice(0,8000), visibility:body.visibility||'group', meta:body.meta||{}};
+      db.entries.push(e); saveL(db);
+      return Promise.resolve({entry:e});
+    }
+    if ((m = path.match(/^\/groups\/([A-Za-z0-9]+)\/entries\/([^/]+)\/comments$/)) && o.method==='POST'){
+      const e = db.entries.find(x=>x.id===m[2] && x.group===m[1]); if (!e) return Promise.reject(new Error('not found'));
+      e.meta.comments = e.meta.comments||[];
+      e.meta.comments.push({id:uid2(), ts:Date.now(), authorName:String(body.authorName||'').slice(0,40), text:String(body.text||'').slice(0,1000)});
+      saveL(db);
+      return Promise.resolve({entry:e});
+    }
+    if ((m = path.match(/^\/groups\/([A-Za-z0-9]+)\/entries\/([^/]+)$/)) && o.method==='DELETE'){
+      const g = db.groups[m[1]]; if (!g) return Promise.reject(new Error('group not found'));
+      const i = db.entries.findIndex(x=>x.id===m[2] && x.group===g.code);
+      if (i<0) return Promise.reject(new Error('not found'));
+      if (!(body.adminKey===g.adminKey || db.entries[i].authorId===body.memberId)) return Promise.reject(new Error('no rights'));
+      db.entries.splice(i,1); saveL(db);
+      return Promise.resolve({ok:true});
+    }
+    if ((m = path.match(/^\/sync\/(.+)$/)) && o.method==='PUT'){
+      db.sync[decodeURIComponent(m[1])] = {ts:Date.now(), data:body};
+      saveL(db);
+      return Promise.resolve({ok:true, ts:db.sync[decodeURIComponent(m[1])].ts});
+    }
+    if ((m = path.match(/^\/sync\/(.+)$/))){
+      const rec = db.sync[decodeURIComponent(m[1])]; if (!rec) return Promise.reject(new Error('not found'));
+      return Promise.resolve(rec);
+    }
+    return Promise.reject(new Error('unknown endpoint: '+path));
+  }
+  return {
+    ready,
+    isStatic: () => staticMode === true,
+    async call(path, opts){
+      await ready;
+      if (staticMode) return handle(path.replace(/^\/api/, ''), opts);
+      const r = await fetch('/api'+path, Object.assign({headers:{'Content-Type':'application/json'}}, opts,
+        opts && opts.body ? {body: JSON.stringify(opts.body)} : {}));
+      const j = await r.json().catch(()=>({error:'bad json'}));
+      if (!r.ok) throw new Error(j.error || r.status);
+      return j;
+    }
+  };
+})();
 async function api(path, opts={}){
-  const r = await fetch('/api'+path, Object.assign({headers:{'Content-Type':'application/json'}}, opts,
-    opts.body ? {body: JSON.stringify(opts.body)} : {}));
-  const j = await r.json().catch(()=>({error:'bad json'}));
-  if (!r.ok) throw new Error(j.error || r.status);
-  return j;
+  return Store.call(path, opts);
 }
 
 /* ---------------- i18n / theme ---------------- */
@@ -276,7 +365,7 @@ function addEventDialog(date){
 /* ---------- feeds (materials / errors / cases / duty-swaps) ---------- */
 async function fetchFeed(type){
   if (!S.group) return null;
-  try { const j = await api(`/groups/${S.group.code}/feed?type=${type}`); return j.entries; }
+  try { const j = await api(`/groups/${S.group.code}/feed`, {type}); return j.entries; }
   catch { return null; }
 }
 function entryHtml(e, extra=''){
@@ -1305,6 +1394,7 @@ ROUTES.setgroup = function(){
     <p class="muted" style="font-size:.8rem">${t('disclaimer')}</p>
   </div>
   <div class="card"><h3>👥 ${t('set_group')}</h3>
+    <p id="static-note" class="muted" style="font-size:.84rem"></p>
     ${g?`<div class="entry">
       <div class="meta"><span class="badge ok">${g.code}</span> <b>${esc(g.name)}</b></div>
       <p>${t('role')}: <b>${g.me.role==='admin'?t('role_admin'):t('role_student')}</b> · ${esc(g.me.name)}</p>
@@ -1348,6 +1438,12 @@ ROUTES.setgroup.after = function(){
   };
   const lv = $('#grp-leave');
   if (lv) lv.onclick = ()=>{ S.group=null; save(); applyChrome(); go('setgroup'); };
+  Store.ready.then(()=>{
+    if (Store.isStatic()){
+      const box = $('#static-note');
+      if (box) box.innerHTML = '📦 <b>Статический режим</b>: сайт развёрнут без сервера, поэтому группы, ленты и синхронизация хранятся только в этом браузере. Для обмена между устройствами задеплойте Node-версию (README → «Вариант Б») или запустите <code>npm start</code>.';
+    }
+  });
   const mem = $('#grp-members');
   if (mem && S.group) api(`/groups/${S.group.code}`).then(j=>{
     mem.innerHTML = `<h3 style="font-size:.95rem">${t('group_members')} (${j.group.members.length})</h3>
