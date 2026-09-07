@@ -116,6 +116,8 @@ const Store = (function(){
           S.group = null; save(); applyChrome();
           throw new Error('Группа больше не существует на сервере — создайте новую или войдите по коду');
         }
+        if (typeof j.error === 'string' && j.error.includes('not found'))
+          throw new Error('Запись не найдена — возможно, её уже удалили. Обновите страницу');
         throw new Error(j.error || r.status);
       }
       return j;

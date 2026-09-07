@@ -143,4 +143,11 @@ app.get('/api/sync/:key', (req, res) => {
   res.json(rec);
 });
 
+/* неизвестные адреса: API отвечает JSON-404, всё остальное — на главную,
+   чтобы пользователь никогда не видел голое 'Cannot GET /not-found' */
+app.use((req, res) => {
+  if (req.path.startsWith('/api/')) return res.status(404).json({error:'not found'});
+  res.redirect('/');
+});
+
 app.listen(PORT, () => console.log('MedHub running on http://localhost:' + PORT));
