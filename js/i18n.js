@@ -137,6 +137,7 @@ ru: {
   disclaimer: "Учебный проект. Не используйте для клинических решений без проверки по первоисточникам.",
   // feeds shared
   feed_post: "Опубликовать", feed_empty: "Записей пока нет — будьте первым!", posted: "Опубликовано",
+  local_hint: "📦 Локальный режим: записи хранятся только в вашем браузере. Создайте группу, чтобы делиться с одногруппниками.",
   added: "Добавлено", required: "Заполните обязательные поля",
   stat_today: "Сегодня", ev_none: "Событий нет", days_left: "дн. до",
   course1: "1 курс", course2: "2 курс", course3: "3 курс", course4: "4 курс", course5: "5 курс", course6: "6 курс",
@@ -251,6 +252,7 @@ uz: {
   saved: "Saqlandi", deleted: "O'chirildi", confirm_delete: "Yozuvni o'chirish?",
   disclaimer: "O'quv loyihasi. Klinik qarorlar uchun birinchi manbalarni tekshiring.",
   feed_post: "Chop etish", feed_empty: "Hozircha yozuvlar yo'q", posted: "Chop etildi",
+  local_hint: "📦 Lokal rejim: yozuvlar faqat brauzeringizda saqlanadi. Ulashish uchun guruh yarating.",
   added: "Qo'shildi", required: "Majburiy maydonlarni to'ldiring",
   stat_today: "Bugun", ev_none: "Tadbir yo'q", days_left: "kun qoldi",
   course1: "1-kurs", course2: "2-kurs", course3: "3-kurs", course4: "4-kurs", course5: "5-kurs", course6: "6-kurs",
@@ -365,6 +367,7 @@ en: {
   saved: "Saved", deleted: "Deleted", confirm_delete: "Delete entry?",
   disclaimer: "Educational project. Verify against primary sources before clinical use.",
   feed_post: "Publish", feed_empty: "No entries yet — be the first!", posted: "Published",
+  local_hint: "📦 Local mode: entries are stored in your browser only. Create a group to share with classmates.",
   added: "Added", required: "Fill required fields",
   stat_today: "Today", ev_none: "No events", days_left: "days left",
   course1: "Year 1", course2: "Year 2", course3: "Year 3", course4: "Year 4", course5: "Year 5", course6: "Year 6",

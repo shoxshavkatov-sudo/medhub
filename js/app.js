@@ -11,6 +11,7 @@ const daysBetween = (a,b) => Math.round((new Date(b)-new Date(a))/86400000);
 
 /* ---------------- state ---------------- */
 const DEFAULTS = {lang:'ru', theme:'light', quality:'high', latin:false,
+  localFeed:{material:[],error:[],case:[],'duty-swap':[],diary:[]},
   grades:[], events:[], diary:[], skills:{}, ops:[], reflect:[], duties:[],
   decks:[], cards:[], srs:{}, streak:0, lastReview:'',
   patient:{solved:0, attempted:0}, notif:{duty:true, colloq:true, cards:true},
@@ -207,6 +208,80 @@ function go(route, arg){
 }
 function stopSims(){ if (window.ECGRen) ECGRen.stop(); if (window.Ausc) Ausc.stop(); }
 
+/* ---------------- PDF export (jsPDF + DejaVu, кириллица) ---------------- */
+const PDFX = (function(){
+  let loading = null;
+  function ensure(){
+    if (window.jspdf && window.DEJAVU_SANS_B64) return Promise.resolve();
+    if (loading) return loading;
+    loading = new Promise((res, rej)=>{
+      const s1 = document.createElement('script'); s1.src = 'vendor/jspdf.umd.min.js';
+      s1.onload = () => {
+        const s2 = document.createElement('script'); s2.src = 'vendor/font-dejavu.js';
+        s2.onload = () => { try {
+          const {jsPDF} = window.jspdf;
+          const d = new jsPDF();
+          d.addFileToVFS('DejaVu.ttf', window.DEJAVU_SANS_B64);
+          d.addFont('DejaVu.ttf', 'DejaVu', 'normal');
+          d.addFont('DejaVu.ttf', 'DejaVu', 'bold');
+          res();
+        } catch(e){ rej(e); } };
+        s2.onerror = rej; document.head.appendChild(s2);
+      };
+      s1.onerror = rej; document.head.appendChild(s1);
+    });
+    return loading;
+  }
+  async function download(filename, title, blocks){
+    await ensure();
+    const {jsPDF} = window.jspdf;
+    const doc = new jsPDF({unit:'mm', format:'a4'});
+    doc.addFileToVFS('DejaVu.ttf', window.DEJAVU_SANS_B64);
+    doc.addFont('DejaVu.ttf', 'DejaVu', 'normal');
+    doc.addFont('DejaVu.ttf', 'DejaVu', 'bold');
+    const W=210, M=15, BOT=283; let y=18;
+    doc.setFont('DejaVu','bold'); doc.setFontSize(16); doc.setTextColor(25,35,60);
+    doc.text(title, M, y); y+=7;
+    doc.setFont('DejaVu','normal'); doc.setFontSize(9); doc.setTextColor(130);
+    doc.text('MedHub · '+new Date().toLocaleString(), M, y); y+=8;
+    doc.setTextColor(25);
+    const para = (txt, size, bold, gap)=>{
+      doc.setFont('DejaVu', bold?'bold':'normal'); doc.setFontSize(size);
+      const lines = doc.splitTextToSize(String(txt??''), W-M*2);
+      const lh = size*0.46;
+      for (const ln of lines){
+        if (y+lh > BOT){ doc.addPage(); y=18; }
+        doc.text(ln, M, y); y += lh;
+      }
+      y += gap;
+    };
+    for (const b of blocks){
+      if (b.h !== undefined) para(b.h, 13, true, 2.5);
+      else if (b.p !== undefined) para(b.p, 10.5, false, 3);
+      else if (b.kv){ para(b.kv[0]+': '+b.kv[1], 10.5, false, 1.5); }
+      else if (b.table){
+        const cols = b.table.head, rows = b.table.rows, colW = (W-M*2)/cols.length;
+        if (y+10 > BOT){ doc.addPage(); y=18; }
+        doc.setFont('DejaVu','bold'); doc.setFontSize(9.5);
+        cols.forEach((c,i)=>doc.text(String(c).slice(0,40), M+i*colW, y));
+        y+=2; doc.setDrawColor(150); doc.line(M,y,W-M,y); y+=4.5;
+        doc.setFont('DejaVu','normal'); doc.setFontSize(9);
+        for (const r of rows){
+          const cl = r.map(c=>doc.splitTextToSize(String(c??''), colW-2));
+          const rh = Math.max(1,...cl.map(l=>l.length))*4.1+1.5;
+          if (y+rh > BOT){ doc.addPage(); y=18; }
+          r.forEach((c,i)=>doc.text(cl[i], M+i*colW, y));
+          y += rh;
+          doc.setDrawColor(230); doc.line(M,y,W-M,y); y+=2;
+        }
+        y+=3;
+      }
+    }
+    doc.save(filename);
+  }
+  return {download};
+})();
+
 /* ---------------- ui helpers ---------------- */
 function toast(msg){ const el=$('#toast'); el.textContent=msg; el.classList.remove('hidden');
   clearTimeout(toast._t); toast._t=setTimeout(()=>el.classList.add('hidden'), 2600); }
@@ -282,7 +357,7 @@ ROUTES.grades = function(){
       <tr><td>${esc(g.subject)}</td><td>${t('course'+g.course)}</td><td><b>${g.grade}</b></td><td>${g.cred||'—'}</td><td>${g.date}</td>
       <td><button class="btn small danger" data-del="${g.id}">✕</button></td></tr>`).join('') ||
       `<tr><td colspan="6" class="muted">${t('empty')}</td></tr>`}</tbody></table></div>
-    <p><button class="btn secondary small" id="g-csv">⬇ ${t('export_excel')}</button></p>
+    <p><button class="btn secondary small" id="g-pdf">⬇ PDF</button></p>
   </div>`;
 };
 ROUTES.grades.after = function(){
@@ -293,8 +368,10 @@ ROUTES.grades.after = function(){
     save(); toast(t('saved')); go('grades');
   };
   $$('[data-del]').forEach(b=>b.onclick=()=>{ S.grades = S.grades.filter(g=>g.id!==b.dataset.del); save(); go('grades'); });
-  $('#g-csv').onclick = ()=>csv('medhub-grades.csv', [[t('subject'),t('course'),t('grade'),t('credits'),t('date')],
-    ...S.grades.map(g=>[g.subject,g.course,g.grade,g.cred,g.date])]);
+  $('#g-pdf').onclick = ()=>PDFX.download('medhub-ocenki.pdf', t('nav_grades'), [
+    {kv:[t('gpa'), S.grades.length ? (S.grades.reduce((a,g)=>a+g.grade,0)/S.grades.length).toFixed(2) : '—']},
+    {table:{head:[t('subject'),t('course'),t('grade'),t('credits'),t('date')],
+      rows:S.grades.map(g=>[g.subject,t('course'+g.course),g.grade,g.cred||'—',g.date])}}]);
   // trend chart: running average of grades sorted by date
   const cv = $('#gpa-chart'); if (cv){ const ctx = cv.getContext('2d'); cv.width = cv.offsetWidth;
     const pts = S.grades.slice().sort((a,b)=>a.date<b.date?-1:1);
@@ -341,6 +418,7 @@ ROUTES.calendar = function(){
       <b style="flex:1;text-align:center;font-size:1.05rem">${calMonth.toLocaleDateString(undefined,{month:'long',year:'numeric'})}</b>
       <button class="btn secondary small" id="cal-next">→</button>
       <button class="btn small" id="cal-add">＋ ${t('add_event')}</button>
+      <button class="btn small secondary" id="cal-pdf">⬇ PDF</button>
     </div>
     <div class="cal">${cells}</div>
   </div>
@@ -349,6 +427,10 @@ ROUTES.calendar = function(){
 ROUTES.calendar.after = function(){
   $('#cal-prev').onclick = ()=>{ calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth()-1, 1); go('calendar'); };
   $('#cal-next').onclick = ()=>{ calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth()+1, 1); go('calendar'); };
+  $('#cal-pdf').onclick = ()=>PDFX.download('medhub-calendar.pdf', t('nav_calendar'), [
+    {table:{head:[t('date'),t('type'),t('title'),t('subject')],
+      rows:S.events.filter(e=>e.date>=todayISO()).sort((a,b)=>a.date<b.date?-1:1)
+        .map(e=>[e.date, t('ev_'+e.type), e.title||t('ev_'+e.type), e.subject||'—'])}}]);
   $$('.cal .day[data-date]').forEach(d=>d.onclick=()=>addEventDialog(d.dataset.date));
   $('#cal-add').onclick = ()=>addEventDialog(todayISO());
   $$('[data-evdel]').forEach(b=>b.onclick=()=>{ S.events = S.events.filter(e=>e.id!==b.dataset.evdel); save(); go('calendar'); });
@@ -372,8 +454,19 @@ function addEventDialog(date){
 }
 
 /* ---------- feeds (materials / errors / cases / duty-swaps) ---------- */
+function localFeed(type){
+  return (S.localFeed[type]||[]).slice().sort((a,b)=>b.ts-a.ts);
+}
+function feedBanner(){
+  if (S.group) return `<div class="entry tight" style="background:var(--panel2);margin-bottom:10px">
+    <span class="badge ok">👥 ${esc(S.group.name)}</span> <span class="muted" style="font-size:.8rem">код: ${esc(S.group.code)}</span>
+    <span class="muted" style="font-size:.8rem"> · записи видят все участники</span></div>`;
+  return `<div class="entry tight" style="background:var(--panel2);margin-bottom:10px">
+    <span class="muted" style="font-size:.85rem">${t('local_hint')}</span>
+    <a href="#" data-goto="setgroup" style="font-size:.85rem;margin-left:6px">→ ${t('set_group_create')}</a></div>`;
+}
 async function fetchFeed(type){
-  if (!S.group) return null;
+  if (!S.group) return localFeed(type);
   try { const j = await api(`/groups/${S.group.code}/feed`, {type}); return j.entries; }
   catch { return null; }
 }
@@ -391,6 +484,10 @@ function entryHtml(e, extra=''){
 function bindFeedActions(container, type, refresh){
   container.querySelectorAll('[data-edel]').forEach(b=>b.onclick=async()=>{
     if (!confirm(t('confirm_delete'))) return;
+    if (!S.group){
+      S.localFeed[type] = (S.localFeed[type]||[]).filter(x=>x.id!==b.dataset.edel);
+      save(); return refresh();
+    }
     try { await api(`/groups/${S.group.code}/entries/${b.dataset.edel}`, {method:'DELETE',
       body:{memberId:S.group.me.id, adminKey:S.group.adminKey}}); refresh(); }
     catch(e){ toast(e.message); }
@@ -437,15 +534,18 @@ ROUTES.materials = function(){
 ROUTES.materials.after = async function(){
   const refresh = async ()=>{
     const box = $('#mat-feed');
-    if (!S.group){ box.innerHTML = `<div class="empty">${t('set_group_join')} → ${t('nav_lang')}</div>`; return; }
-    const entries = await fetchFeed('material');
-    box.innerHTML = (entries&&entries.length) ? entries.map(e=>entryHtml(e)).join('') : `<div class="empty">${t('feed_empty')}</div>`;
+    const entries = (await fetchFeed('material')) || [];
+    box.innerHTML = feedBanner() + ((entries.length) ? entries.map(e=>entryHtml(e)).join('') : `<div class="empty">${t('feed_empty')}</div>`);
     bindFeedActions(box, 'material', refresh);
   };
   $('#m-post').onclick = async ()=>{
     const title=$('#m-title').value.trim(), link=$('#m-link').value.trim(), body=$('#m-body').value.trim();
     if (!title && !link && !body) return toast(t('required'));
-    if (!S.group) return toast(t('set_group_join'));
+    if (!S.group){
+      S.localFeed.material = S.localFeed.material||[];
+      S.localFeed.material.unshift({id:uid(), ts:Date.now(), authorName:'Я', title, body, meta:{link}, visibility:'private'});
+      save(); toast(t('saved')); $('#m-title').value=$('#m-link').value=$('#m-body').value=''; return refresh();
+    }
     try { await api(`/groups/${S.group.code}/entries`,{method:'POST',body:{type:'material',
       authorId:S.group.me.id, authorName:S.group.me.name, title, body, meta:{link},
       visibility:$('#f-vis').value}}); toast(t('posted')); $('#m-title').value=$('#m-link').value=$('#m-body').value=''; refresh(); }
@@ -472,19 +572,23 @@ ROUTES.errors = function(){
 ROUTES.errors.after = async function(){
   const refresh = async ()=>{
     const box = $('#err-feed');
-    if (!S.group){ box.innerHTML = `<div class="empty">${t('set_group_join')} → ${t('nav_lang')}</div>`; return; }
-    const entries = await fetchFeed('error');
-    box.innerHTML = (entries&&entries.length) ? entries.map(e=>{
+    const entries = (await fetchFeed('error')) || [];
+    box.innerHTML = feedBanner() + ((entries&&entries.length) ? entries.map(e=>{
       const html = entryHtml(e, `<div class="comment"><b>❌ ${t('wrong_ans')}:</b> ${esc(e.meta&&e.meta.wrong||'—')}</div>
         <div class="comment"><b>✅ ${t('right_ans')}:</b> ${esc(e.meta&&e.meta.right||'—')}</div>
         ${e.meta&&e.meta.lesson?`<div class="comment">💡 ${esc(e.meta.lesson)}</div>`:''}`);
-      return html; }).join('') : `<div class="empty">${t('feed_empty')}</div>`;
+      return html; }).join('') : `<div class="empty">${t('feed_empty')}</div>`);
     bindFeedActions(box, 'error', refresh);
   };
   $('#e-post').onclick = async ()=>{
     const q=$('#e-q').value.trim(), wrong=$('#e-wrong').value.trim(), right=$('#e-right').value.trim(), lesson=$('#e-lesson').value.trim();
     if (!q || !right) return toast(t('required'));
-    if (!S.group) return toast(t('set_group_join'));
+    if (!S.group){
+      S.localFeed.error = S.localFeed.error||[];
+      S.localFeed.error.unshift({id:uid(), ts:Date.now(), authorName:'Я', title:$('#e-sub').value, body:q,
+        meta:{wrong, right, lesson}, visibility:'private'});
+      save(); toast(t('saved')); $('#e-q').value=''; return refresh();
+    }
     try { await api(`/groups/${S.group.code}/entries`,{method:'POST',body:{type:'error',
       authorId:S.group.me.id, authorName:S.group.me.name, title:$('#e-sub').value, body:q,
       meta:{wrong, right, lesson}, visibility:'group'}});
@@ -648,7 +752,7 @@ ROUTES.labs = function(){
   </div>
   <div class="card"><input type="search" id="lab-q" placeholder="${t('search')}…"></div>
   <div class="card"><div id="lab-list" class="table-wrap"></div>
-    <p><button class="btn secondary small" id="lab-csv">⬇ ${t('export_excel')}</button></p></div>`;
+    <p><button class="btn secondary small" id="lab-pdf">⬇ PDF</button></p></div>`;
 };
 ROUTES.labs.after = function(){
   let panel = 'hem';
@@ -661,8 +765,9 @@ ROUTES.labs.after = function(){
   $$('#lab-tabs .chip').forEach(b=>b.onclick=()=>{ panel=b.dataset.p;
     $$('#lab-tabs .chip').forEach(x=>x.classList.toggle('on',x===b)); draw(); });
   $('#lab-q').addEventListener('input', draw);
-  $('#lab-csv').onclick = ()=>csv('medhub-labs.csv', [[t('lab_analyte'),t('lab_unit'),t('lab_m'),t('lab_f'),t('lab_child'),t('lab_note')],
-    ...window.LABS.map(l=>[l.a,l.u,l.m,l.f,l.ch,l.n])]);
+  $('#lab-pdf').onclick = ()=>PDFX.download('medhub-normy.pdf', t('nav_labs'), [
+    {table:{head:[t('lab_analyte'),t('lab_unit'),t('lab_m'),t('lab_f'),t('lab_child')],
+      rows:window.LABS.filter(l=>panel==='all'||l.p===panel).map(l=>[l.a,l.u,l.m||'—',l.f||'—',l.ch||'—'])}}]);
   draw();
 };
 
@@ -1026,8 +1131,13 @@ ROUTES.tests.after = function(){
       ${st.wrong.length?`<h3>${st.wrong.length} ✗</h3>${st.wrong.map(q=>`<div class="entry tight" style="text-align:left">
         <b>${esc(q.q)}</b><div class="comment">✅ ${t('test_correct_answer')}: ${esc(q.o[q.a])}</div>
         <div class="comment">${esc(q.e)}</div></div>`).join('')}`:''}
-      <p><button class="btn" id="t-again">↻ ${t('test_again')}</button></p></div>`;
+      <p><button class="btn" id="t-again">↻ ${t('test_again')}</button>
+      <button class="btn secondary" id="t-pdf">⬇ PDF</button></p></div>`;
     $('#t-again').onclick = ()=>go('tests');
+    $('#t-pdf').onclick = ()=>PDFX.download('medhub-test.pdf', t('test_score'), [
+      {kv:[t('test_score'), `${st.score} / ${st.qs.length} (${pct}%)`]},
+      {table:{head:['№', t('test_correct_answer'), t('test_explain')],
+        rows:st.wrong.map((q,i)=>[i+1, q.o[q.a], q.e])}}]);
   }
   $('#t-start').onclick = ()=>run(window.TESTS.filter(x=>x.s===sub), false);
   $('#t-exam').onclick = ()=>run(window.TESTS, true);
@@ -1131,8 +1241,8 @@ ROUTES.curation = function(){
         <button class="btn small secondary" data-view="${d.id}">👁</button>
         <button class="btn small danger" data-cdel="${d.id}">🗑</button></div>
     </div>`).join('') || `<div class="empty">${t('empty')}</div>`}
-    ${S.diary.length?`<p><button class="btn secondary small" id="cur-print">🖨 ${t('print')} / ${t('export_pdf')}</button>
-    <button class="btn secondary small" id="cur-csv">⬇ ${t('export_excel')}</button></p>`:''}
+    ${S.diary.length?`<p><button class="btn secondary small" id="cur-print">🖨 ${t('print')}</button>
+    <button class="btn secondary small" id="cur-pdf">⬇ PDF</button></p>`:''}
   </div>`;
 };
 ROUTES.curation.after = function(){
@@ -1151,6 +1261,13 @@ ROUTES.curation.after = function(){
   const sh = $('#cur-share'); if (sh) sh.onclick = ()=>{ const d = read();
     if (!d.cc && !d.diag) return toast(t('required'));
     S.diary.push(Object.assign({id:uid()}, d)); save();
+    if (!S.group){
+      S.localFeed.diary = S.localFeed.diary||[];
+      S.localFeed.diary.unshift({id:uid(), ts:Date.now(), authorName:'Я', title:`Курация: ${d.diag||''}`,
+        body:`${d.sex}, ${d.age}\n${t('cur_cc')}: ${d.cc}\n${t('cur_diag')}: ${d.diag}\n${t('cur_plan')}: ${d.plan}`,
+        meta:{}, visibility:d.visibility});
+      save(); toast(t('saved')); return go('curation');
+    }
     api(`/groups/${S.group.code}/entries`,{method:'POST',body:{type:'diary', authorId:S.group.me.id,
       authorName:S.group.me.name, title:`Курация: ${d.diag||''}`,
       body:`${d.sex}, ${d.age}\n${t('cur_cc')}: ${d.cc}\n${t('cur_diag')}: ${d.diag}\n${t('cur_plan')}: ${d.plan}`,
@@ -1169,9 +1286,11 @@ ROUTES.curation.after = function(){
   $$('[data-cdel]').forEach(b=>b.onclick=()=>{ if (!confirm(t('confirm_delete'))) return;
     S.diary = S.diary.filter(x=>x.id!==b.dataset.cdel); save(); go('curation'); });
   const pr = $('#cur-print'); if (pr) pr.onclick = ()=>window.print();
-  const csvBtn = $('#cur-csv'); if (csvBtn) csvBtn.onclick = ()=>csv('medhub-diary.csv',
-    [[t('date'),t('pat_sex'),t('pat_age'),t('cur_cc'),t('cur_anam'),t('cur_status'),t('cur_diag'),t('cur_plan')],
-     ...S.diary.map(d=>[d.date,d.sex,d.age,d.cc,d.anam,d.status,d.diag,d.plan])]);
+  const curPdf = $('#cur-pdf'); if (curPdf) curPdf.onclick = ()=>PDFX.download('medhub-kundalik.pdf', t('nav_curation'),
+    S.diary.flatMap(d=>[{h:`${d.date} · ${d.sex}, ${d.age}`},
+      {kv:[t('cur_cc'), d.cc]}, d.anam?{kv:[t('cur_anam'), d.anam]}:null,
+      d.status?{kv:[t('cur_status'), d.status]}:null, {kv:[t('cur_diag'), d.diag||'—']},
+      d.plan?{kv:[t('cur_plan'), d.plan]}:null, {p:''}]).filter(Boolean));
 };
 
 /* ---------- SKILLS ---------- */
@@ -1183,6 +1302,8 @@ ROUTES.skills = function(){
   <div class="grid g2">
     <div class="stat"><div class="num">${done}/${window.SKILLS.length}</div><div class="lbl">${t('skills_mine')}</div>
       <div class="progressbar" style="margin-top:8px"><div style="width:${pct}%"></div></div></div>
+    <div class="stat"><div class="num">${done}/${window.SKILLS.length}</div><div class="lbl">⬇ PDF</div>
+      <p><button class="btn small secondary" id="sk-pdf">⬇ PDF</button></p></div>
     <div class="stat"><div class="num">${S.group?S.group.name:'—'}</div><div class="lbl">${t('skills_progress')}</div>
       ${S.group?`<p><button class="btn small secondary" id="sk-share">⬆ ${t('feed_post')}</button></p>`:`<p class="muted" style="font-size:.8rem">${t('set_group_join')}</p>`}</div>
   </div>
@@ -1199,10 +1320,18 @@ ROUTES.skills = function(){
 ROUTES.skills.after = function(){
   $$('.seg').forEach(seg=>seg.querySelectorAll('button').forEach(b=>b.onclick=()=>{
     S.skills[seg.dataset.sk] = +b.dataset.v; save(); go('skills'); }));
+  $('#sk-pdf').onclick = ()=>PDFX.download('medhub-navyki.pdf', t('nav_skills'),
+    [{table:{head:[t('subject'),t('sk_watched')+'/'+t('sk_assisted')+'/'+t('sk_independent')],
+      rows:window.SKILLS.map(sk=>[sk.g+' — '+sk.n, [t('sk_watched'),t('sk_assisted'),t('sk_independent')][S.skills[sk.n]||0]])}}]);
   const sh = $('#sk-share');
   if (sh) sh.onclick = async ()=>{
     const done = Object.entries(S.skills).filter(([,v])=>v===2).map(([k])=>k);
-    if (!S.group) return toast(t('set_group_join'));
+    if (!S.group){
+      S.localFeed.diary = S.localFeed.diary||[];
+      S.localFeed.diary.unshift({id:uid(), ts:Date.now(), authorName:'Я',
+        title:`✅ ${t('skills_mine')}: ${done.length}/${window.SKILLS.length}`, body:done.join(', '), meta:{}, visibility:'private'});
+      save(); return toast(t('saved'));
+    }
     try { await api(`/groups/${S.group.code}/entries`,{method:'POST',body:{type:'diary',
       authorId:S.group.me.id, authorName:S.group.me.name,
       title:`✅ ${t('skills_mine')}: ${done.length}/${window.SKILLS.length}`,
@@ -1229,7 +1358,8 @@ ROUTES.ops = function(){
     <label class="f">${t('ops_operation')}</label><input type="text" id="o-op" placeholder="ЛХЭ, аппендэктомия, кесарево…">
     <label class="f">${t('notes')}</label><textarea id="o-notes"></textarea>
     ${visSelect('private')}
-    <p><button class="btn" id="o-add">＋ ${t('add')}</button></p>
+    <p><button class="btn" id="o-add">＋ ${t('add')}</button>
+    <button class="btn secondary" id="ops-pdf">⬇ PDF</button></p>
   </div>
   <div class="card">${S.ops.slice().reverse().map(o=>`<div class="entry">
     <div class="meta"><span class="badge ${o.role==='assistant'?'ok':''}">${o.role==='assistant'?t('ops_assistant'):t('ops_observer')}</span> <b>${o.date}</b></div>
@@ -1244,6 +1374,9 @@ ROUTES.ops.after = function(){
     S.ops.push({id:uid(), date:$('#o-date').value||todayISO(), role:$('#o-role').value, op, notes:$('#o-notes').value.trim()});
     save(); toast(t('added')); go('ops');
   };
+  $('#ops-pdf').onclick = ()=>PDFX.download('medhub-operacii.pdf', t('nav_ops'), [
+    {table:{head:[t('date'),t('ops_role'),t('ops_operation'),t('notes')],
+      rows:S.ops.map(o=>[o.date, o.role==='assistant'?t('ops_assistant'):t('ops_observer'), o.op, o.notes||'—'])}}]);
   $$('[data-odel]').forEach(b=>b.onclick=()=>{ S.ops = S.ops.filter(o=>o.id!==b.dataset.odel); save(); go('ops'); });
 };
 
@@ -1260,18 +1393,22 @@ ROUTES.cases = function(){
 ROUTES.cases.after = async function(){
   const refresh = async ()=>{
     const box = $('#cs-feed');
-    if (!S.group){ box.innerHTML = `<div class="empty">${t('set_group_join')} → ${t('nav_lang')}</div>`; return; }
-    const entries = await fetchFeed('case');
-    box.innerHTML = (entries&&entries.length) ? entries.map(e=>{
+    const entries = (await fetchFeed('case')) || [];
+    box.innerHTML = feedBanner() + ((entries.length) ? entries.map(e=>{
       const comments = (e.meta&&e.meta.comments||[]).map(c=>`<div class="comment"><b>${esc(c.authorName)}:</b> ${esc(c.text)}</div>`).join('');
-      return entryHtml(e, comments + (S.group?`<div style="display:flex;gap:6px;margin-top:8px">
+      return entryHtml(e, comments + `<div style="display:flex;gap:6px;margin-top:8px">
         <input type="text" placeholder="${t('comment')}…" data-cin="${e.id}">
-        <button class="btn small" data-csend="${e.id}">${t('send')}</button></div>`:''));
-    }).join('') : `<div class="empty">${t('feed_empty')}</div>`;
+        <button class="btn small" data-csend="${e.id}">${t('send')}</button></div>`);
+    }).join('') : `<div class="empty">${t('feed_empty')}</div>`);
     bindFeedActions(box, 'case', refresh);
     box.querySelectorAll('[data-csend]').forEach(b=>b.onclick=async()=>{
       const inp = box.querySelector(`[data-cin="${b.dataset.csend}"]`);
       if (!inp.value.trim()) return;
+      if (!S.group){
+        const e = (S.localFeed.case||[]).find(x=>x.id===b.dataset.csend);
+        if (e){ e.meta.comments = e.meta.comments||[]; e.meta.comments.push({id:uid(), ts:Date.now(), authorName:'Я', text:inp.value.trim()}); save(); }
+        return refresh();
+      }
       try { await api(`/groups/${S.group.code}/entries/${b.dataset.csend}/comments`,{method:'POST',
         body:{authorId:S.group.me.id, authorName:S.group.me.name, text:inp.value.trim()}});
         refresh(); } catch(e){ toast(e.message); }
@@ -1280,7 +1417,11 @@ ROUTES.cases.after = async function(){
   $('#cs-post').onclick = async ()=>{
     const title=$('#cs-title').value.trim(), body=$('#cs-body').value.trim();
     if (!body) return toast(t('required'));
-    if (!S.group) return toast(t('set_group_join'));
+    if (!S.group){
+      S.localFeed.case = S.localFeed.case||[];
+      S.localFeed.case.unshift({id:uid(), ts:Date.now(), authorName:'Я', title, body, meta:{}, visibility:'private'});
+      save(); toast(t('saved')); $('#cs-title').value=''; $('#cs-body').value=''; return refresh();
+    }
     try { await api(`/groups/${S.group.code}/entries`,{method:'POST',body:{type:'case',
       authorId:S.group.me.id, authorName:S.group.me.name, title, body, meta:{}, visibility:'group'}});
       toast(t('posted')); $('#cs-title').value=''; $('#cs-body').value=''; refresh(); }
@@ -1299,7 +1440,8 @@ ROUTES.reflect = function(){
     <label class="f">${t('refl_topics')} (через запятую)</label><input type="text" id="r-topics">
     <p><button class="btn" id="r-add">💾 ${t('save')}</button></p>
   </div>
-  <div class="card">${S.reflect.slice().reverse().map(r=>`<div class="entry">
+  <div class="card"><p><button class="btn secondary small" id="refl-pdf">⬇ PDF</button></p>
+  ${S.reflect.slice().reverse().map(r=>`<div class="entry">
     <div class="meta">🔒 <b>${r.date}</b></div>
     <p><b>${t('refl_sit')}:</b> ${esc(r.sit)}</p>
     <p style="color:var(--danger)"><b>${t('refl_err')}:</b> ${esc(r.err)}</p>
@@ -1317,6 +1459,9 @@ ROUTES.reflect.after = function(){
       topics:$('#r-topics').value.split(',').map(x=>x.trim()).filter(Boolean)});
     save(); toast(t('saved')); go('reflect');
   };
+  $('#refl-pdf').onclick = ()=>PDFX.download('medhub-refleksiya.pdf', t('nav_reflect'),
+    S.reflect.flatMap(r=>[{h:r.date},{kv:[t('refl_sit'), r.sit]},{kv:[t('refl_err'), r.err]},
+      {kv:[t('refl_lesson'), r.lesson||'—']}, {kv:[t('refl_topics'), (r.topics||[]).join(', ')||'—']}, {p:''}]));
   $$('[data-rdel]').forEach(b=>b.onclick=()=>{ S.reflect = S.reflect.filter(r=>r.id!==b.dataset.rdel); save(); go('reflect'); });
   $$('[data-tocard]').forEach(b=>b.onclick=()=>{
     const r = S.reflect.find(x=>x.id===b.dataset.tocard); if (!r) return;
@@ -1344,7 +1489,8 @@ ROUTES.duty = function(){
       <div><label class="f">${t('duty_from')}</label><input type="time" id="d-from" value="08:00"></div>
       <div><label class="f">${t('duty_to')}</label><input type="time" id="d-to" value="08:00"></div>
     </div>
-    <p><button class="btn" id="d-add">＋ ${t('add')}</button></p>
+    <p><button class="btn" id="d-add">＋ ${t('add')}</button>
+    <button class="btn secondary" id="duty-pdf">⬇ PDF</button></p>
   </div>
   <div class="card"><h3>${t('nav_duty')}</h3>
     ${up.map(d=>`<div class="entry"><div class="meta">🛏 <b>${d.date}</b> · ${d.from}–${d.to} · ${esc(d.place||'—')} · ${d.hours} ${t('duty_hours').toLowerCase()}</div>
@@ -1364,10 +1510,19 @@ ROUTES.duty.after = async function(){
       place:$('#d-place').value.trim(), hours:Math.round(h*10)/10});
     save(); toast(t('added')); go('duty');
   };
+  $('#duty-pdf').onclick = ()=>PDFX.download('medhub-dezhurstva.pdf', t('nav_duty'), [
+    {kv:[t('duty_total'), S.duties.reduce((a,d)=>a+(d.hours||0),0)+'']},
+    {table:{head:[t('date'),t('duty_from'),t('duty_to'),t('duty_place'),t('duty_hours')],
+      rows:S.duties.map(d=>[d.date,d.from,d.to,d.place||'—',d.hours])}}]);
   $$('[data-ddel]').forEach(b=>b.onclick=()=>{ S.duties = S.duties.filter(d=>d.id!==b.dataset.ddel); save(); go('duty'); });
   $$('[data-swap]').forEach(b=>b.onclick=async()=>{
     const d = S.duties.find(x=>x.id===b.dataset.swap);
-    if (!S.group) return toast(t('set_group_join'));
+    if (!S.group){
+      S.localFeed['duty-swap'] = S.localFeed['duty-swap']||[];
+      S.localFeed['duty-swap'].unshift({id:uid(), ts:Date.now(), authorName:'Я',
+        title:`🔁 ${t('duty_swap')}: ${d.date} ${d.from}–${d.to}`, body:d.place||'', meta:{date:d.date}, visibility:'private', localDutyId:d.id});
+      save(); toast(t('saved')); return loadSwaps();
+    }
     try { await api(`/groups/${S.group.code}/entries`,{method:'POST',body:{type:'duty-swap',
       authorId:S.group.me.id, authorName:S.group.me.name,
       title:`🔁 ${t('duty_swap')}: ${d.date} ${d.from}–${d.to}`, body:d.place||'', meta:{date:d.date},
@@ -1375,12 +1530,17 @@ ROUTES.duty.after = async function(){
       toast(t('posted')); loadSwaps(); } catch(e){ toast(e.message); }
   });
   async function loadSwaps(){
-    const box = $('#swap-feed'); if (!S.group || !box) return;
-    const entries = await fetchFeed('duty-swap');
-    box.innerHTML = `<h3 style="margin:14px 0 8px">🔁 ${t('duty_swap')}</h3>` + ((entries&&entries.length) ?
+    const box = $('#swap-feed'); if (!box) return;
+    const entries = (await fetchFeed('duty-swap')) || [];
+    box.innerHTML = feedBanner() + `<h3 style="margin:14px 0 8px">🔁 ${t('duty_swap')}</h3>` + ((entries.length) ?
       entries.map(e=>entryHtml(e, `<button class="btn small" data-take="${e.id}">🙋 ${t('duty_taken')}</button>`)).join('')
       : `<div class="empty">${t('feed_empty')}</div>`);
     box.querySelectorAll('[data-take]').forEach(btn=>btn.onclick=async()=>{
+      if (!S.group){
+        const e = (S.localFeed['duty-swap']||[]).find(x=>x.id===btn.dataset.take);
+        if (e){ e.meta.comments = e.meta.comments||[]; e.meta.comments.push({id:uid(), ts:Date.now(), authorName:'Я', text:'🙋‍♀️ ' + t('duty_taken')}); save(); }
+        return loadSwaps();
+      }
       try { await api(`/groups/${S.group.code}/entries/${btn.dataset.take}/comments`,{method:'POST',
         body:{authorId:S.group.me.id, authorName:S.group.me.name, text:'🙋‍♀️ ' + t('duty_taken')}});
         toast(t('posted')); loadSwaps(); } catch(e){ toast(e.message); }
@@ -1502,9 +1662,10 @@ ROUTES.setdata = function(){
     <p class="muted" style="font-size:.8rem">Синхронизация по ключу: тот же ключ на другом устройстве подтянет данные.</p>
   </div>
   <div class="card"><h3>📄 ${t('export_pdf')} / ${t('export_excel')}</h3>
-    <p><button class="btn secondary" id="ex-diary-print">🖨 ${t('nav_diary')} → ${t('export_pdf')}</button>
-    <button class="btn secondary" id="ex-diary-csv">⬇ ${t('nav_diary')} → ${t('export_excel')}</button>
-    <button class="btn secondary" id="ex-all-csv">⬇ ${t('nav_grades')} → ${t('export_excel')}</button></p>
+    <p><button class="btn secondary" id="ex-diary-print">🖨 ${t('nav_diary')} → ${t('print')}</button>
+    <button class="btn secondary" id="ex-diary-pdf">⬇ ${t('nav_diary')} → PDF</button>
+    <button class="btn secondary" id="ex-grades-pdf">⬇ ${t('nav_grades')} → PDF</button>
+    <button class="btn secondary" id="ex-duty-pdf">⬇ ${t('nav_duty')} → PDF</button></p>
   </div>`;
 };
 ROUTES.setdata.after = function(){
@@ -1532,12 +1693,9 @@ ROUTES.setdata.after = function(){
     catch(e){ toast(t('backup_bad')); }
   };
   $('#ex-diary-print').onclick = ()=>{ go('curation'); setTimeout(()=>window.print(), 400); };
-  $('#ex-diary-csv').onclick = ()=>csv('medhub-diary.csv',
-    [[t('date'),t('pat_sex'),t('pat_age'),t('cur_cc'),t('cur_diag'),t('cur_plan')],
-     ...S.diary.map(d=>[d.date,d.sex,d.age,d.cc,d.diag,d.plan])]);
-  $('#ex-all-csv').onclick = ()=>csv('medhub-grades.csv',
-    [[t('subject'),t('course'),t('grade'),t('credits'),t('date')],
-     ...S.grades.map(g=>[g.subject,g.course,g.grade,g.cred,g.date])]);
+  $('#ex-diary-pdf').onclick = ()=>{ go('curation'); setTimeout(()=>$('#cur-pdf')?.click(), 500); };
+  $('#ex-grades-pdf').onclick = ()=>{ go('grades'); setTimeout(()=>$('#g-pdf')?.click(), 500); };
+  $('#ex-duty-pdf').onclick = ()=>{ go('duty'); setTimeout(()=>$('#duty-pdf')?.click(), 500); };
 };
 
 /* ---------- SETTINGS: notifications ---------- */
@@ -1597,6 +1755,10 @@ $('#search-go').onclick = globalSearch;
 $('#global-search').addEventListener('keydown', e=>{ if (e.key==='Enter') globalSearch(); });
 document.addEventListener('keydown', e=>{ if (e.key==='/' && document.activeElement.tagName!=='INPUT' && document.activeElement.tagName!=='TEXTAREA'){
   e.preventDefault(); $('#global-search').focus(); } });
+document.addEventListener('click', e=>{
+  const g = e.target.closest('[data-goto]');
+  if (g){ e.preventDefault(); go(g.dataset.goto); }
+});
 applyChrome();
 go('grades');
 })();

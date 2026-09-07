@@ -23,7 +23,10 @@ app.get('/api/health', (req, res) => res.json({ok:true, server:true}));
 const DB = path.join(__dirname, 'data.json');
 let db = { groups: {}, entries: [], sync: {} };
 try { db = Object.assign(db, JSON.parse(fs.readFileSync(DB, 'utf8'))); } catch {}
-const persist = () => fs.writeFile(DB, JSON.stringify(db), () => {});
+const persist = () => {
+  try { fs.copyFileSync(DB, DB + '.bak'); } catch {}
+  fs.writeFile(DB, JSON.stringify(db), () => {});
+};
 
 const code4 = () => crypto.randomBytes(3).toString('hex').toUpperCase(); // 6 hex chars
 const nowId = () => Date.now().toString(36) + crypto.randomBytes(3).toString('hex');
