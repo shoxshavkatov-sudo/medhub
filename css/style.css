@@ -29,7 +29,8 @@ h2{font-size:1.35rem} h3{font-size:1.05rem}
 #main-col{flex:1;min-width:0;display:flex;flex-direction:column}
 #view{flex:1;padding:20px 24px 130px;max-width:1080px;width:100%;margin:0 auto}
 .brand-top{display:flex;align-items:center;gap:8px;font-size:1.05rem;white-space:nowrap}
-.brand-top .logo{font-size:1.35rem}
+.brand-top .logo{width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;color:var(--accent)}
+.brand-top .logo svg{width:100%;height:100%}
 
 /* ---------- topbar ---------- */
 #topbar{display:flex;gap:10px;align-items:center;padding:10px 18px;
@@ -274,3 +275,34 @@ dialog::backdrop{background:rgba(0,0,0,.5)}
   .card,.entry,.stat{box-shadow:none;border:1px solid #ccc}
   #view{max-width:100%}
 }
+
+/* ============ плавные анимации ============ */
+html{scroll-behavior:smooth}
+html.no-anim *,html.no-anim *::before,html.no-anim *::after{animation:none!important;transition:none!important}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+#view>*{animation:fadeUp .4s cubic-bezier(.2,.7,.3,1) both}
+#view>*:nth-child(2){animation-delay:.05s}
+#view>*:nth-child(3){animation-delay:.1s}
+#view>*:nth-child(4){animation-delay:.15s}
+#view>*:nth-child(5){animation-delay:.2s}
+#view>*:nth-child(n+6){animation-delay:.25s}
+@keyframes sheetIn{from{opacity:0;transform:translate(-50%,18px) scale(.98)}to{opacity:1;transform:translate(-50%,0)}}
+#dock-sheet{animation:sheetIn .3s cubic-bezier(.2,.7,.3,1)}
+@keyframes toastIn{from{opacity:0;transform:translate(-50%,14px)}to{opacity:1;transform:translate(-50%,0)}}
+#toast{animation:toastIn .32s cubic-bezier(.2,.7,.3,1)}
+@keyframes dlgIn{from{opacity:0;transform:translateY(16px) scale(.96)}to{opacity:1;transform:none}}
+dialog[open]{animation:dlgIn .28s cubic-bezier(.2,.7,.3,1)}
+dialog::backdrop{animation:fadeBk .25s ease}
+@keyframes fadeBk{from{background:transparent}to{background:rgba(0,0,0,.5)}}
+.btn,.chip,.icon-btn,.dock-btn,.dock-item,.seg button,.zone-dot,.ausc-pt,.atlas-item,.skill-row .seg{transition:transform .16s cubic-bezier(.2,.7,.3,1),background .2s ease,box-shadow .2s ease,color .2s ease,border-color .2s ease}
+.btn:hover,.chip:hover{transform:translateY(-1px)}
+.btn:active,.chip:active,.icon-btn:active,.dock-item:active,.seg button:active{transform:scale(.95)}
+.card,.entry,.stat{transition:transform .22s cubic-bezier(.2,.7,.3,1),box-shadow .22s ease}
+.card:hover,.entry:hover,.stat:hover{transform:translateY(-2px);box-shadow:0 10px 28px rgba(0,0,0,.13)}
+.atlas-item:hover,.anat-fig:hover{transform:translateY(-3px)}
+.atlas-item,.anat-fig{transition:transform .22s cubic-bezier(.2,.7,.3,1),box-shadow .22s ease}
+.ic{width:1.05em;height:1.05em;vertical-align:-.18em;flex:none}
+.dot{width:7px;height:7px;border-radius:99px;display:inline-block;background:var(--accent);margin-right:4px;vertical-align:1px}
+.dot.exam{background:var(--danger)}.dot.colloq,.dot.test{background:var(--warn)}.dot.duty{background:var(--accent2)}
+.ecg-heart .ic{width:1.3em;height:1.3em;vertical-align:-.3em}
