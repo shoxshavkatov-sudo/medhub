@@ -22,6 +22,79 @@ catch { S = Object.assign({}, DEFAULTS); }
 const save = () => localStorage.setItem('medhub', JSON.stringify(S));
 window.LANG = S.lang;
 
+/* ---------------- свои SVG-иконки (вместо эмодзи) ---------------- */
+const ICONS = {
+ move:'<path d="M12 3.5v17M3.5 12h17M12 3.5 9.5 6M12 3.5 14.5 6M12 20.5 9.5 18M12 20.5l2.5-2.5M3.5 12 6 9.5M3.5 12 6 14.5M20.5 12 18 9.5M20.5 12l-2.5 2.5"/>',
+ board:'<path d="M3.5 5h17v11.5h-17Z"/><path d="M12 16.5v3M8 20.5h8"/><path d="m6.5 11.5 3-3.5 2.5 3 2-2.5 3.5 4"/>',
+ undo:'<path d="M9.5 7 4 12l5.5 5M4 12h9a6 6 0 0 1 6 6v1"/>',
+ redo:'<path d="m14.5 7 5.5 5-5.5 5M20 12h-9a6 6 0 0 0-6 6v1"/>',
+ eraser:'<path d="m7 20.5h10"/><path d="M13.5 3.5 20.5 10.5 12 19H7l-3.5-3.5Z"/><path d="m9.5 7.5 7 7"/>',
+ note:'<rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M20 13.5 13.5 20H6a2 2 0 0 1-2-2v-2.5Z"/>',
+ fullscreen:'<path d="M3.5 8.5v-5h5M15.5 3.5h5v5M20.5 15.5v5h-5M8.5 20.5h-5v-5"/>',
+ grid:'<path d="M3.5 3.5h17v17h-17ZM3.5 9h17M3.5 15h17M9 3.5v17M15 3.5v17"/>',
+ zoomin:'<circle cx="11" cy="11" r="6.2"/><path d="m15.8 15.8 5 5M11 8.2v5.6M8.2 11h5.6"/>',
+ zoomout:'<circle cx="11" cy="11" r="6.2"/><path d="m15.8 15.8 5 5M8.2 11h5.6"/>',
+ fit:'<path d="M3.5 8.5v-5h5M15.5 3.5h5v5M20.5 15.5v5h-5M8.5 20.5h-5v-5"/><path d="M8 12h8"/>',
+ image:'<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="9.5" r="1.7"/><path d="m3.5 16.5 5-4.5 4 3.5 3.5-3 4.5 4"/>',
+ pen:'<path d="m15 4.5 4.5 4.5L8 20.5H3.5V16Z"/><path d="m12.5 7 4.5 4.5"/>',
+ cursor:'<path d="M5 3.5 19 11.5l-6 1.5-3.5 5.5Z"/>',
+ bline:'<path d="M4.5 19.5 19.5 4.5"/>',
+ barrow:'<path d="M4.5 19.5 19.5 4.5M12 4.5h7.5V12"/>',
+ brect:'<rect x="4" y="5.5" width="16" height="13" rx="1.5"/>',
+ bellipse:'<ellipse cx="12" cy="12" rx="8.5" ry="6.5"/>',
+ btext:'<path d="M5 6.5V4.5h14v2M12 4.5v15M9 19.5h6"/>',
+ trash2:'<path d="M4.5 6.5h15M9.5 6.5V4.2h5v2.3M6.5 6.5l1 14h9l1-14"/>',
+ steth:'<path d="M5.5 3v5a4.5 4.5 0 0 0 9 0V3"/><path d="M3.5 3h2M14.5 3h2"/><path d="M10 12v3a5.5 5.5 0 0 0 11 0v-2.2"/><circle cx="21" cy="10.5" r="1.9"/>',
+ grad:'<path d="M12 4 21 8.5 12 13 3 8.5Z"/><path d="M6.5 10.8V15c0 1.5 2.5 2.8 5.5 2.8s5.5-1.3 5.5-2.8v-4.2"/><path d="M21 8.5v5.5"/>',
+ search:'<circle cx="11" cy="11" r="6.2"/><path d="m15.8 15.8 5 5"/>',
+ book:'<path d="M5.5 5A2.5 2.5 0 0 1 8 2.5h10.5V19H8A2.5 2.5 0 0 0 5.5 21.5Z"/><path d="M5.5 19V5"/>',
+ heart:'<path d="M12 20.5S4.6 16.2 2.9 11.6C1.7 8.3 3.8 5.2 7 5.2c2 0 3.7 1 5 2.7C13.3 6.2 15 5.2 17 5.2c3.2 0 5.3 3.1 4.1 6.4C19.4 16.2 12 20.5 12 20.5Z"/>',
+ brain:'<path d="M9.3 3.8a2.6 2.6 0 0 0-2.6 2.6v.5a2.8 2.8 0 0 0-2 2.7c0 .7.3 1.4.7 1.9a2.9 2.9 0 0 0-.6 1.8 2.9 2.9 0 0 0 1.9 2.7 2.7 2.7 0 0 0 2.6 2.3c1 0 1.9-.5 2.4-1.3V5.1a2.6 2.6 0 0 0-2.4-1.3Z"/><path d="M14.7 3.8a2.6 2.6 0 0 1 2.6 2.6v.5a2.8 2.8 0 0 1 2 2.7c0 .7-.3 1.4-.7 1.9a2.9 2.9 0 0 1 .6 1.8 2.9 2.9 0 0 1-1.9 2.7 2.7 2.7 0 0 1-2.6 2.3c-1 0-1.9-.5-2.4-1.3V5.1a2.6 2.6 0 0 1 2.4-1.3Z"/>',
+ diary:'<rect x="5" y="3" width="14.5" height="18" rx="2.2"/><path d="M9.2 3v18"/><path d="M13 8.2h3.4M13 12h3.4"/>',
+ sliders:'<path d="M4 7.2h8.6M16.4 7.2H20M4 12h2.6M10.4 12H20M4 16.8h10.6M18.4 16.8H20"/><circle cx="14.5" cy="7.2" r="1.9"/><circle cx="8.5" cy="12" r="1.9"/><circle cx="16.5" cy="16.8" r="1.9"/>',
+ users:'<circle cx="9" cy="8" r="3.4"/><path d="M2.8 20c.6-3.5 3.1-5.5 6.2-5.5s5.6 2 6.2 5.5"/><circle cx="17" cy="9" r="2.6"/><path d="M16.4 14.6c2.6.4 4.3 2.1 4.8 4.9"/>',
+ box:'<path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5Z"/><path d="M3.5 7.5 12 12l8.5-4.5M12 12v9"/>',
+ lock:'<rect x="5.5" y="10.5" width="13" height="10" rx="2.2"/><path d="M8.5 10.5V7.8a3.5 3.5 0 0 1 7 0v2.7"/>',
+ globe:'<circle cx="12" cy="12" r="8.6"/><path d="M3.4 12h17.2M12 3.4c2.6 2.4 3.9 5.3 3.9 8.6s-1.3 6.2-3.9 8.6c-2.6-2.4-3.9-5.3-3.9-8.6s1.3-6.2 3.9-8.6Z"/>',
+ download:'<path d="M12 3.5v11M7.5 10.5 12 15l4.5-4.5"/><path d="M4.5 19.5h15"/>',
+ save:'<path d="M5 3.5h11L20.5 8v12.5H5Z"/><path d="M8 3.5V9h7V3.5"/><path d="M8 13h8v7.5H8Z"/>',
+ doc:'<path d="M6.5 2.5h8L19 7v14.5H6.5Z"/><path d="M14 2.5V7h5"/><path d="M9.5 12h5M9.5 15.5h5"/>',
+ printer:'<path d="M7 8V3.5h10V8"/><rect x="3.5" y="8" width="17" height="8.5" rx="2"/><path d="M7 14h10v6.5H7Z"/>',
+ dice:'<rect x="3.5" y="3.5" width="17" height="17" rx="3.5"/><circle cx="8.3" cy="8.3" r="1.2" fill="currentColor" stroke="none"/><circle cx="15.7" cy="8.3" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="8.3" cy="15.7" r="1.2" fill="currentColor" stroke="none"/><circle cx="15.7" cy="15.7" r="1.2" fill="currentColor" stroke="none"/>',
+ calendar:'<rect x="3.5" y="5" width="17" height="16" rx="2.5"/><path d="M3.5 9.5h17M8 2.5v4M16 2.5v4"/>',
+ chart:'<path d="M4 20V4M4 20h16"/><path d="M8 16v-5M12 16V8M16 16v-8"/>',
+ bell:'<path d="M12 3.5a5.5 5.5 0 0 1 5.5 5.5c0 4 1.5 5.5 2 6.5h-15c.5-1 2-2.5 2-6.5A5.5 5.5 0 0 1 12 3.5Z"/><path d="M10 18.5a2 2 0 0 0 4 0"/>',
+ check:'<path d="m4.5 12.5 5 5L19.5 6.5"/>',
+ x:'<path d="m5.5 5.5 13 13M18.5 5.5l-13 13"/>',
+ play:'<path d="M7 4.5 19.5 12 7 19.5Z"/>',
+ clock:'<circle cx="12" cy="12" r="8.6"/><path d="M12 6.5V12l3.5 2"/>',
+ refresh:'<path d="M20 12a8 8 0 1 1-2.3-5.6M20 3.5V8h-4.5"/>',
+ pin:'<path d="M12 21s6.5-6.6 6.5-11a6.5 6.5 0 1 0-13 0c0 4.4 6.5 11 6.5 11Z"/><circle cx="12" cy="10" r="2.3"/>',
+ flame:'<path d="M12 21c-3.9 0-6.5-2.6-6.5-6 0-2.5 1.5-4.5 3-6.5.6 1 1.3 1.7 2 2C10.3 8 11 5 13.5 3c-.3 2.3.6 3.6 1.9 5.1 1.4 1.6 3.1 3.2 3.1 6.4 0 3.9-2.6 6.5-6.5 6.5Z"/>',
+ moon:'<path d="M20 14.5A8.5 8.5 0 1 1 9.5 4 7 7 0 0 0 20 14.5Z"/>',
+ sun:'<circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8"/>',
+ crown:'<path d="M4 8.5 8 12l4-6 4 6 4-3.5-1.5 11h-13Z"/>',
+ bed:'<path d="M3.5 19.5V9M3.5 13.5h17v6M20.5 19.5v-6a3 3 0 0 0-3-3h-8v3.5"/><circle cx="7.3" cy="11" r="1.8"/>',
+ headphones:'<path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="13.5" width="4.4" height="7" rx="2"/><rect x="16.6" y="13.5" width="4.4" height="7" rx="2"/>',
+ info:'<circle cx="12" cy="12" r="8.6"/><path d="M12 11v5M12 7.6v.4"/>',
+ lungs:'<path d="M12 3.5v7M12 10.5c-1.2-2-3.4-2.6-5-2.6-2.6 0-3.5 1.6-3.5 4.6v4c0 2 1 3.5 2.8 3.5 2.9 0 5.7-2.3 5.7-5.5M12 10.5c1.2-2 3.4-2.6 5-2.6 2.6 0 3.5 1.6 3.5 4.6v4c0 2-1 3.5-2.8 3.5-2.9 0-5.7-2.3-5.7-5.5"/>',
+ bowel:'<path d="M6.5 4.5h8a4 4 0 0 1 4 4c0 1.8-1.2 3-3 3H9a3.5 3.5 0 0 0 0 7h8.5"/><path d="M6.5 4.5a3 3 0 0 0 0 6"/>',
+ swap:'<path d="M17 3.5 20.5 7 17 10.5M20.5 7H7M7 20.5 3.5 17 7 13.5M3.5 17h13.5"/>',
+ warn:'<path d="M12 3.5 21.5 20h-19Z"/><path d="M12 9.5v4.5M12 16.8v.4"/>',
+ cards:'<rect x="3.5" y="6.5" width="11" height="14" rx="2"/><path d="M8 3.5h11a2 2 0 0 1 2 2v11"/>',
+ palette:'<path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.5 0 2-1 1.6-1.9-.5-1.2.3-2.6 1.9-2.6h2A3.5 3.5 0 0 0 21 12.5C21 7.5 17 3.5 12 3.5Z"/><circle cx="8" cy="10" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="7.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="16" cy="10" r="1.2" fill="currentColor" stroke="none"/>',
+ monitor:'<rect x="3" y="4.5" width="18" height="12.5" rx="2"/><path d="M9 20.5h6M12 17v3.5"/>',
+ child:'<circle cx="12" cy="6.5" r="3"/><path d="M12 10v6M8.5 12.5h7M12 16l-3 5M12 16l3 5"/>',
+ trash:'<path d="M4.5 6.5h15M9.5 6.5V4.2h5v2.3M6.5 6.5l1 14h9l1-14"/><path d="M10 10.5v6M14 10.5v6"/>',
+ eye:'<path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.6"/>',
+ pill:'<rect x="3.5" y="8.5" width="17" height="7" rx="3.5" transform="rotate(-35 12 12)"/><path d="m9.2 6.7 5.6 10.6"/>',
+ link:'<path d="M9.5 14.5 14.5 9.5"/><path d="M7 12 5 14a3.5 3.5 0 0 0 5 5l2-2M17 12l2-2a3.5 3.5 0 0 0-5-5l-2 2"/>'
+};
+function ic(name, cls=''){
+  const p = ICONS[name];
+  return p ? `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>` : '';
+}
+
 /* ---------------- api: server, или localStorage в статическом режиме ---------------- */
 const Store = (function(){
   let staticMode = null;                       // null = ещё определяем
@@ -132,11 +205,12 @@ async function api(path, opts={}){
 /* ---------------- i18n / theme ---------------- */
 function applyChrome(){
   document.documentElement.dataset.theme = S.theme;
+  document.documentElement.classList.toggle('no-anim', S.quality==='low');
   window.LANG = S.lang;
   $('#lang-select').value = S.lang;
   $('#global-search').placeholder = t('search_placeholder');
   $('.small-print').textContent = t('disclaimer');
-  $('#theme-btn').textContent = S.theme==='light'?'🌙':S.theme==='dark'?'☀️':'🔴';
+  $('#theme-btn').innerHTML = S.theme==='light'?ic('moon'):S.theme==='dark'?ic('sun'):ic('flame');
   buildDock();
 }
 let currentRoute = 'grades';
@@ -147,6 +221,7 @@ const DOCK_ICONS = {
  search:'<circle cx="11" cy="11" r="6.2"/><path d="m15.8 15.8 5 5"/>',
  ref:'<path d="M5.5 5A2.5 2.5 0 0 1 8 2.5h10.5V19H8A2.5 2.5 0 0 0 5.5 21.5Z"/><path d="M5.5 19V5"/><path d="M12 6.5v6M9 9.5h6"/>',
  sims:'<path d="M12 20.5S4.6 16.2 2.9 11.6C1.7 8.3 3.8 5.2 7 5.2c2 0 3.7 1 5 2.7C13.3 6.2 15 5.2 17 5.2c3.2 0 5.3 3.1 4.1 6.4C19.4 16.2 12 20.5 12 20.5Z"/><path d="M6.2 11.5h2.6l1.4-2.7 2.9 5.6 1.4-2.9h3.3"/>',
+ board:'<path d="M3.5 5h17v11.5h-17Z"/><path d="M12 16.5v3M8 20.5h8"/><path d="m6.5 11.5 3-3.5 2.5 3 2-2.5 3.5 4"/>',
  train:'<path d="M9.3 3.8a2.6 2.6 0 0 0-2.6 2.6v.5a2.8 2.8 0 0 0-2 2.7c0 .7.3 1.4.7 1.9a2.9 2.9 0 0 0-.6 1.8 2.9 2.9 0 0 0 1.9 2.7 2.7 2.7 0 0 0 2.6 2.3c1 0 1.9-.5 2.4-1.3V5.1a2.6 2.6 0 0 0-2.4-1.3Z"/><path d="M14.7 3.8a2.6 2.6 0 0 1 2.6 2.6v.5a2.8 2.8 0 0 1 2 2.7c0 .7-.3 1.4-.7 1.9a2.9 2.9 0 0 1 .6 1.8 2.9 2.9 0 0 1-1.9 2.7 2.7 2.7 0 0 1-2.6 2.3c-1 0-1.9-.5-2.4-1.3V5.1a2.6 2.6 0 0 1 2.4-1.3Z"/><path d="M12 5.1v13.6"/>',
  diary:'<rect x="5" y="3" width="14.5" height="18" rx="2.2"/><path d="M9.2 3v18"/><path d="M13 8.2h3.4M13 12h3.4"/>',
  set:'<path d="M4 7.2h8.6M16.4 7.2H20M4 12h2.6M10.4 12H20M4 16.8h10.6M18.4 16.8H20"/><circle cx="14.5" cy="7.2" r="1.9"/><circle cx="8.5" cy="12" r="1.9"/><circle cx="16.5" cy="16.8" r="1.9"/>'
@@ -160,6 +235,8 @@ const DOCK = [
   items:[['icd','nav_icd'],['drugs','nav_drugs'],['labs','nav_labs'],['protocols','nav_protocols'],['calcs','nav_calc']]},
  {key:'sims', lbl:{ru:'Симуляторы', uz:'Simulyator', en:'Sims'}, icon:'sims', first:'pain',
   items:[['pain','nav_pain'],['auscult','nav_auscult'],['ecg','nav_ecg'],['atlas','nav_atlas']]},
+ {key:'board', lbl:{ru:'Доска', uz:'Doska', en:'Board'}, icon:'board', first:'board',
+  items:[['board','nav_board']]},
  {key:'train', lbl:{ru:'Тренажёры', uz:'Mashqlar', en:'Trainers'}, icon:'train', first:'patient',
   items:[['patient','nav_patient'],['tests','nav_tests'],['cards','nav_cards']]},
  {key:'diary', lbl:{ru:'Дневник', uz:'Kundalik', en:'Diary'}, icon:'diary', first:'curation',
@@ -198,6 +275,7 @@ document.addEventListener('click', e=>{
 
 function go(route, arg){
   stopSims();
+  try{ Board.unmount(); }catch(_e){}
   currentRoute = route;
   $$('#nav .nav-item').forEach(b=>b.classList.toggle('active', b.dataset.route===route));
   const fn = ROUTES[route];
@@ -297,10 +375,10 @@ function download(name, text){ const blob=new Blob([text],{type:'application/jso
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); }
 const head = (ttl, hint, extra='') => `<div class="page-head"><h2>${esc(ttl)}</h2>${hint?`<p>${esc(hint)}</p>`:''}${extra}</div>`;
 const visSelect = (cur='group') => `<label class="f">${t('visibility')}</label>
-  <select id="f-vis"><option value="private" ${cur==='private'?'selected':''}>🔒 ${t('vis_private')}</option>
-  <option value="group" ${cur==='group'?'selected':''}>👥 ${t('vis_group')}</option>
-  <option value="public" ${cur==='public'?'selected':''}>🌍 ${t('vis_public')}</option></select>`;
-const visIcon = v => v==='private'?'🔒':v==='public'?'🌍':'👥';
+  <select id="f-vis"><option value="private" ${cur==='private'?'selected':''}>${t('vis_private')}</option>
+  <option value="group" ${cur==='group'?'selected':''}>${t('vis_group')}</option>
+  <option value="public" ${cur==='public'?'selected':''}>${t('vis_public')}</option></select>`;
+const visIcon = v => v==='private'?ic('lock'):v==='public'?ic('globe'):ic('users');
 
 /* --- real anatomy mapping for pain zones --- */
 const ZONE_ANAT = {head:'anat_nerves',face:'anat_nerves',eye:'anat_nerves',ear:'anat_nerves',throat:'anat_nerves',neck:'anat_nerves',
@@ -403,7 +481,7 @@ ROUTES.calendar = function(){
     const iso = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const evs = (evByDate[iso]||[]);
     cells += `<div class="day ${iso===todayISO()?'today':''}" data-date="${iso}">
-      <div class="dnum">${d}</div>${evs.map(e=>`<div class="ev ${e.type}" title="${esc(e.title||t('ev_'+e.type))}">${e.type==='duty'?'🛏':e.type==='exam'?'❗':e.type==='colloq'||e.type==='test'?'❕':'📚'} ${esc(e.title||t('ev_'+e.type))}</div>`).join('')}</div>`;
+      <div class="dnum">${d}</div>${evs.map(e=>`<div class="ev ${e.type}" title="${esc(e.title||t('ev_'+e.type))}">${esc(e.title||t('ev_'+e.type))}</div>`).join('')}</div>`;
   }
   const upcoming = S.events.filter(e=>e.date>=todayISO()).sort((a,b)=>a.date<b.date?-1:1).slice(0,8)
     .map(e=>`<div class="entry tight"><div class="meta"><span class="badge ${e.type==='exam'?'bad':e.type==='colloq'||e.type==='test'?'warn':'ok'}">${t('ev_'+e.type)}</span>
@@ -459,10 +537,10 @@ function localFeed(type){
 }
 function feedBanner(){
   if (S.group) return `<div class="entry tight" style="background:var(--panel2);margin-bottom:10px">
-    <span class="badge ok">👥 ${esc(S.group.name)}</span> <span class="muted" style="font-size:.8rem">код: ${esc(S.group.code)}</span>
+    <span class="badge ok">${ic('users')} ${esc(S.group.name)}</span> <span class="muted" style="font-size:.8rem">код: ${esc(S.group.code)}</span>
     <span class="muted" style="font-size:.8rem"> · записи видят все участники</span></div>`;
   return `<div class="entry tight" style="background:var(--panel2);margin-bottom:10px">
-    <span class="muted" style="font-size:.85rem">${t('local_hint')}</span>
+    ${ic('box')}<span class="muted" style="font-size:.85rem"> ${t('local_hint')}</span>
     <a href="#" data-goto="setgroup" style="font-size:.85rem;margin-left:6px">→ ${t('set_group_create')}</a></div>`;
 }
 async function fetchFeed(type){
@@ -475,10 +553,10 @@ function entryHtml(e, extra=''){
   return `<div class="entry" data-eid="${e.id}">
     <div class="meta">${visIcon(e.visibility)} <b>${esc(e.authorName)}</b> · ${fmtD(e.ts)}</div>
     ${e.title?`<div><b>${esc(e.title)}</b></div>`:''}
-    ${e.meta&&e.meta.link?`<div>🔗 <a href="${esc(e.meta.link)}" target="_blank" rel="noopener">${esc(e.meta.link)}</a></div>`:''}
+    ${e.meta&&e.meta.link?`<div>${ic('link')} <a href="${esc(e.meta.link)}" target="_blank" rel="noopener">${esc(e.meta.link)}</a></div>`:''}
     ${e.body?`<div class="body">${esc(e.body)}</div>`:''}
     ${extra}
-    ${(mine||(S.group&&S.group.me.role==='admin'))?`<div class="entry-actions"><button class="btn small danger" data-edel="${e.id}">🗑</button></div>`:''}
+    ${(mine||(S.group&&S.group.me.role==='admin'))?`<div class="entry-actions"><button class="btn small danger" data-edel="${e.id}">${ic('trash')}</button></div>`:''}
   </div>`;
 }
 function bindFeedActions(container, type, refresh){
@@ -574,9 +652,9 @@ ROUTES.errors.after = async function(){
     const box = $('#err-feed');
     const entries = (await fetchFeed('error')) || [];
     box.innerHTML = feedBanner() + ((entries&&entries.length) ? entries.map(e=>{
-      const html = entryHtml(e, `<div class="comment"><b>❌ ${t('wrong_ans')}:</b> ${esc(e.meta&&e.meta.wrong||'—')}</div>
-        <div class="comment"><b>✅ ${t('right_ans')}:</b> ${esc(e.meta&&e.meta.right||'—')}</div>
-        ${e.meta&&e.meta.lesson?`<div class="comment">💡 ${esc(e.meta.lesson)}</div>`:''}`);
+      const html = entryHtml(e, `<div class="comment">${ic('x')} <b>${t('wrong_ans')}:</b> ${esc(e.meta&&e.meta.wrong||'—')}</div>
+        <div class="comment">${ic('check')} <b>${t('right_ans')}:</b> ${esc(e.meta&&e.meta.right||'—')}</div>
+        ${e.meta&&e.meta.lesson?`<div class="comment">${ic('info')} ${esc(e.meta.lesson)}</div>`:''}`);
       return html; }).join('') : `<div class="empty">${t('feed_empty')}</div>`);
     bindFeedActions(box, 'error', refresh);
   };
@@ -604,12 +682,12 @@ ROUTES.search = function(q){
   <div class="card">
     <div class="search-wrap" style="max-width:100%">
       <input id="s-in" type="search" value="${esc(q||'')}" placeholder="${t('search_placeholder')}">
-      <button class="btn" id="s-go">🔍 ${t('search_btn')}</button>
+      <button class="btn" id="s-go">${ic('search')} ${t('search_btn')}</button>
     </div>
     <div class="chiprow" id="s-scope">
-      <button class="chip on" data-sc="lib">📚 ${t('search_scope_lib')}</button>
-      <button class="chip" data-sc="notes">📝 ${t('search_scope_notes')}</button>
-      <button class="chip" data-sc="web">🌍 ${t('search_scope_web')}</button>
+      <button class="chip on" data-sc="lib">${ic('book')} ${t('search_scope_lib')}</button>
+      <button class="chip" data-sc="notes">${ic('doc')} ${t('search_scope_notes')}</button>
+      <button class="chip" data-sc="web">${ic('globe')} ${t('search_scope_web')}</button>
     </div>
     <div class="chiprow hidden" id="s-ct">
       ${[['books',t('ct_books')],['articles',t('ct_articles')],['cheats',t('ct_cheats')],['video',t('ct_video')]]
@@ -723,14 +801,14 @@ ROUTES.drugs = function(){
   return head(t('nav_drugs'), t('drugs_hint')) + `
   <div class="card"><input type="search" id="dr-q" placeholder="${t('search')}…"></div>
   <div id="dr-list"></div>
-  <p class="muted" style="font-size:.8rem">⚠ ${t('drug_disclaimer')}</p>`;
+  <p class="muted" style="font-size:.8rem">${ic('warn')} ${t('drug_disclaimer')}</p>`;
 };
 ROUTES.drugs.after = function(){
   const draw = ()=>{
     const q = ($('#dr-q').value||'').toLowerCase().trim();
     const rows = window.DRUGS.filter(d=>!q || (d.n+' '+d.ind+' '+d.cl+' '+(d.lat||'')).toLowerCase().includes(q));
     $('#dr-list').innerHTML = rows.map(d=>`<div class="entry">
-      <div class="meta"><span class="badge">${esc(d.cl)}</span>${S.latin&&d.lat?`<span class="badge">💊 ${esc(d.lat)}</span>`:''}</div>
+      <div class="meta"><span class="badge">${esc(d.cl)}</span>${S.latin&&d.lat?`<span class="badge">${ic('pill')} ${esc(d.lat)}</span>`:''}</div>
       <h3>${esc(d.n)}</h3>
       <p><b>${t('d_ind')}:</b> ${esc(d.ind)}</p>
       <p><b>${t('d_dose')}:</b> ${esc(d.dose)}</p>
@@ -819,13 +897,13 @@ ROUTES.pain = function(){
   <div class="chiprow" id="pain-mode">
     <button class="chip ${painMode==='male'?'on':''}" data-m="male">♂ ${t('mode_male')}</button>
     <button class="chip ${painMode==='female'?'on':''}" data-m="female">♀ ${t('mode_female')}</button>
-    <button class="chip ${painMode==='child'?'on':''}" data-m="child">🧒 ${t('mode_child')}</button>
+    <button class="chip ${painMode==='child'?'on':''}" data-m="child">${ic('child')} ${t('mode_child')}</button>
   </div>
   <div class="sim-layout">
     <div class="bodymap-wrap" id="pain-svg"></div>
     <div id="pain-info"><div class="empty">${t('pain_hint')}</div></div>
   </div>
-  <div class="card"><h3>🫀 3D-анатомия</h3>
+  <div class="card"><h3>${ic('heart')} 3D-анатомия</h3>
     <p class="muted" style="font-size:.84rem;margin-top:0">Реальные 3D-модели человека и внутренностей — нажмите, чтобы увеличить.</p>
     <div class="anat-grid">${window.ANAT_LIB.map(a=>`
       <figure class="anat-fig" data-anat="${a.k}"><img src="${a.f}" alt="${esc(a.l)}" loading="lazy"><figcaption>${esc(a.l)}</figcaption></figure>`).join('')}
@@ -850,7 +928,7 @@ ROUTES.pain.after = function(){
       <p><b>${t('pain_causes')}:</b> ${esc(z.causes)}</p>
       <p><b>${t('pain_irr')}:</b> ${esc(z.irr)}</p>
       <p style="color:var(--danger)"><b>${t('pain_red')}:</b> ${esc(z.red)}</p>
-      ${painMode==='child'&&z.peds?`<p class="muted"><b>🧒 ${t('mode_child')}:</b> ${esc(z.peds)}</p>`:''}
+      ${painMode==='child'&&z.peds?`<p class="muted">${ic('child')} <b>${t('mode_child')}:</b> ${esc(z.peds)}</p>`:''}
     </div>`;
   });
 };
@@ -860,9 +938,9 @@ let auscCat = 'heart';
 ROUTES.auscult = function(){
   return head(t('nav_auscult'), t('ausc_hint')) + `
   <div class="chiprow" id="ausc-tabs">
-    <button class="chip ${auscCat==='heart'?'on':''}" data-c="heart">🫀 ${t('heart_points')}</button>
-    <button class="chip ${auscCat==='lung'?'on':''}" data-c="lung">🫁 ${t('lung_points')}</button>
-    <button class="chip ${auscCat==='abdomen'?'on':''}" data-c="abdomen">🫃 ${t('bowel_points')}</button>
+    <button class="chip ${auscCat==='heart'?'on':''}" data-c="heart">${ic('heart')} ${t('heart_points')}</button>
+    <button class="chip ${auscCat==='lung'?'on':''}" data-c="lung">${ic('lungs')} ${t('lung_points')}</button>
+    <button class="chip ${auscCat==='abdomen'?'on':''}" data-c="abdomen">${ic('bowel')} ${t('bowel_points')}</button>
   </div>
   <div class="sim-layout">
     <div class="bodymap-wrap ausc" id="ausc-svg"></div>
@@ -880,8 +958,8 @@ ROUTES.auscult.after = function(){
     const pick = ()=>{ const snd = window.SOUNDS.find(s=>s.id===el.dataset.sound);
       Ausc.play(snd.synth);
       $('#ausc-info').innerHTML = `<div class="card">
-        <h3>🎧 ${esc(snd.n)}</h3>
-        <p class="muted" style="font-size:.82rem">📍 ${esc(el.dataset.p)}</p>
+        <h3>${ic('headphones')} ${esc(snd.n)}</h3>
+        <p class="muted" style="font-size:.82rem">${ic('pin')} ${esc(el.dataset.p)}</p>
         <p><b>${t('ausc_findings')}:</b> ${esc(snd.desc)}</p>
         <p><b>${t('ausc_meaning')}:</b> ${esc(snd.meaning)}</p>
         <p><button class="btn danger small" id="ausc-stop">■ ${t('stop_sound')}</button></p></div>`;
@@ -899,10 +977,10 @@ ROUTES.ecg = function(){
   return head(t('nav_ecg'), t('ecg_hint')) + `
   <div class="chiprow" id="ecg-list">
     ${window.ECGS.map(e=>`<button class="chip" data-e="${e.id}">${esc(e.n)}</button>`).join('')}
-    <button class="chip" id="ecg-quiz-start">🎲 ${t('ecg_quiz')}</button>
+    <button class="chip" id="ecg-quiz-start">${ic('dice')} ${t('ecg_quiz')}</button>
   </div>
   <div class="canvas-wrap"><canvas id="ecg-cv"></canvas>
-    <div class="ecg-hud" id="ecg-hud"><span class="ecg-heart">❤</span><b>—</b><small>${t('ecg_rate')}</small></div>
+    <div class="ecg-hud" id="ecg-hud"><span class="ecg-heart">${ic('heart')}</span><b>—</b><small>${t('ecg_rate')}</small></div>
   </div>
   <div class="ecg-controls">
     <button class="btn small secondary" id="ecg-pause">⏸ ${t('ecg_pause')}</button>
@@ -928,7 +1006,7 @@ ROUTES.ecg.after = function(){
   $$('#ecg-list [data-e]').forEach(b=>b.onclick=()=>{ ecgQuiz=null; show(window.ECGS.find(e=>e.id===b.dataset.e)); });
   $('#ecg-quiz-start').onclick = ()=>{ ecgQuiz = window.ECGS[Math.floor(Math.random()*window.ECGS.length)];
     ECGRen.start(cv, ecgQuiz, S.theme);
-    $('#ecg-info').innerHTML = `<div class="card"><h3>❓ ${t('ecg_quiz')}</h3>
+    $('#ecg-info').innerHTML = `<div class="card"><h3>${ic('info')} ${t('ecg_quiz')}</h3>
       <div class="chiprow">${window.ECGS.map(e=>`<button class="chip" data-g="${e.id}">${esc(e.n)}</button>`).join('')}</div>
       <div id="ecg-quiz-res"></div></div>`;
     $$('#ecg-info [data-g]').forEach(b=>b.onclick=()=>{
@@ -952,7 +1030,7 @@ ROUTES.atlas = function(){
   return head(t('nav_atlas'), t('atlas_hint')) + `
   <div class="chiprow" id="atlas-tabs">${cats.map(([k,l],i)=>`<button class="chip ${i===0?'on':''}" data-c="${k}">${l}</button>`).join('')}</div>
   <div class="atlas-grid" id="atlas-grid"></div>
-  <p class="muted" style="font-size:.8rem">ℹ ${t('atlas_note')}</p>`;
+  <p class="muted" style="font-size:.8rem">${ic('info')} ${t('atlas_note')}</p>`;
 };
 ROUTES.atlas.after = function(){
   let cat = 'all';
@@ -1002,7 +1080,7 @@ ROUTES.atlas.after = function(){
 ROUTES.patient = function(){
   return head(t('nav_patient'), t('pat_hint')) + `
   <div class="card" style="text-align:center">
-    <button class="btn" id="pt-new" style="font-size:1rem">🎲 ${t('pat_new')}</button>
+    <button class="btn" id="pt-new" style="font-size:1rem">${ic('dice')} ${t('pat_new')}</button>
     <p class="muted" style="margin:8px 0 0;font-size:.85rem">${t('pat_stats')}: <b>${S.patient.solved}</b> ${t('solved')} / <b>${S.patient.attempted}</b> ${t('attempted')}</p>
   </div>
   <div id="pt-case"></div>`;
@@ -1033,13 +1111,13 @@ ROUTES.patient.after = function(){
       </div>
       <div class="sim-layout" style="margin-top:12px">
         <div>
-          <h3>🫁 ${t('nav_auscult')}</h3>
-          <p><button class="btn small" id="pt-sound">🎧 ${t('ecg_play')}</button></p>
-          <h3>🗺 ${t('nav_pain')}</h3>
+          <h3>${ic('lungs')} ${t('nav_auscult')}</h3>
+          <p><button class="btn small" id="pt-sound">${ic('headphones')} ${t('ecg_play')}</button></p>
+          <h3>${ic('pin')} ${t('nav_pain')}</h3>
           <div id="pt-map"></div>
         </div>
         <div>
-          <h3>📈 ${t('nav_ecg')}</h3>
+          <h3>${ic('chart')} ${t('nav_ecg')}</h3>
           <div class="canvas-wrap"><canvas id="pt-ecg"></canvas></div>
         </div>
       </div>
@@ -1048,7 +1126,7 @@ ROUTES.patient.after = function(){
       <h3 style="margin-top:14px">${t('pat_dx')}</h3>
       <select id="pt-dx">${opts.map(o=>`<option>${esc(o)}</option>`).join('')}</select>
       <p style="display:flex;gap:10px;flex-wrap:wrap">
-        <button class="btn" id="pt-check">✅ ${t('pat_submit')}</button>
+        <button class="btn" id="pt-check">${ic('check')} ${t('pat_submit')}</button>
         <button class="btn secondary" id="pt-reveal">${t('pat_reveal')}</button>
       </p>
       <div id="pt-verdict"></div>
@@ -1069,7 +1147,7 @@ ROUTES.patient.after = function(){
     };
     $('#pt-reveal').onclick = ()=>{ S.patient.attempted++; save(); $('#pt-verdict').innerHTML='<div id="pt-expl"></div>'; reveal(); };
     function reveal(){
-      $('#pt-expl').innerHTML = `<div class="card"><h3>✅ ${t('pat_showcase')}: ${esc(c.dx)}</h3>
+      $('#pt-expl').innerHTML = `<div class="card"><h3>${ic('check')} ${t('pat_showcase')}: ${esc(c.dx)}</h3>
         <p><b>${t('p_diff')}:</b> ${esc(c.ddx.join('; '))}</p><p>${esc(c.explain)}</p></div>`;
       $('#pt-verdict').parentElement.querySelectorAll('#pt-check,#pt-reveal').forEach(b=>b.disabled=true);
     }
@@ -1083,8 +1161,8 @@ ROUTES.tests = function(){
   return head(t('nav_tests'), t('test_hint')) + `
   <div class="card">
     <div class="chiprow" id="t-sub">${subs.map((s,i)=>`<button class="chip ${i===0?'on':''}" data-s="${esc(s)}">${esc(s)}</button>`).join('')}</div>
-    <p><button class="btn" id="t-start">▶ ${t('test_start')} (${t('test_mode_topic')})</button>
-    <button class="btn secondary" id="t-exam">⏱ ${t('test_mode_exam')}</button></p>
+    <p><button class="btn" id="t-start">${ic('play')} ${t('test_start')} (${t('test_mode_topic')})</button>
+    <button class="btn secondary" id="t-exam">${ic('clock')} ${t('test_mode_exam')}</button></p>
   </div>
   <div id="t-area"></div>`;
 };
@@ -1104,7 +1182,7 @@ ROUTES.tests.after = function(){
     $('#t-area').innerHTML = `<div class="card">
       <div class="meta" style="display:flex;gap:10px;color:var(--muted);font-size:.8rem;margin-bottom:8px">
         <span class="badge">${esc(q.s)}</span><span>${st.i+1} ${t('test_of')} ${st.qs.length}</span>
-        <span style="flex:1"></span>${st.examMode?`<b id="t-timer"></b>`:''}<span>✅ ${st.score}</span></div>
+        <span style="flex:1"></span>${st.examMode?`<b id="t-timer"></b>`:''}<span>${ic('check')} ${st.score}</span></div>
       <h3>${esc(q.q)}</h3>
       ${q.o.map((o,i)=>`<p><button class="chip" style="width:100%;justify-content:flex-start;text-align:left" data-o="${i}">${String.fromCharCode(65+i)}. ${esc(o)}</button></p>`).join('')}
     </div>`;
@@ -1128,10 +1206,10 @@ ROUTES.tests.after = function(){
     $('#t-area').innerHTML = `<div class="card" style="text-align:center">
       <h2>${t('test_score')}: ${st.score} / ${st.qs.length} (${pct}%)</h2>
       <div class="progressbar" style="max-width:300px;margin:10px auto"><div style="width:${pct}%"></div></div>
-      ${st.wrong.length?`<h3>${st.wrong.length} ✗</h3>${st.wrong.map(q=>`<div class="entry tight" style="text-align:left">
-        <b>${esc(q.q)}</b><div class="comment">✅ ${t('test_correct_answer')}: ${esc(q.o[q.a])}</div>
+      ${st.wrong.length?`<h3>${ic('x')} ${st.wrong.length}</h3>${st.wrong.map(q=>`<div class="entry tight" style="text-align:left">
+        <b>${esc(q.q)}</b><div class="comment">${ic('check')} ${t('test_correct_answer')}: ${esc(q.o[q.a])}</div>
         <div class="comment">${esc(q.e)}</div></div>`).join('')}`:''}
-      <p><button class="btn" id="t-again">↻ ${t('test_again')}</button>
+      <p><button class="btn" id="t-again">${ic('refresh')} ${t('test_again')}</button>
       <button class="btn secondary" id="t-pdf">⬇ PDF</button></p></div>`;
     $('#t-again').onclick = ()=>go('tests');
     $('#t-pdf').onclick = ()=>PDFX.download('medhub-test.pdf', t('test_score'), [
@@ -1153,7 +1231,7 @@ ROUTES.cards = function(){
   <div class="grid g3">
     <div class="stat"><div class="num">${due.length}</div><div class="lbl">${t('cards_due')}</div></div>
     <div class="stat"><div class="num">${S.cards.length}</div><div class="lbl">${t('total')} · ${[...new Set(S.cards.map(c=>c.deck))].length} ${t('cards_deck')}</div></div>
-    <div class="stat"><div class="num">${S.streak||0}</div><div class="lbl">🔥 ${t('cards_streak')}</div></div>
+    <div class="stat"><div class="num">${S.streak||0}</div><div class="lbl">${ic('flame')} ${t('cards_streak')}</div></div>
   </div>
   <div class="card">
     <h3>${t('cards_add')}</h3>
@@ -1165,7 +1243,7 @@ ROUTES.cards = function(){
     <label class="f">${t('cards_front')}</label><textarea id="c-front"></textarea>
     <label class="f">${t('cards_back')}</label><textarea id="c-back"></textarea>
     <p><button class="btn" id="c-add">＋ ${t('add')}</button>
-    <button class="btn secondary" id="c-import">📥 ${t('cards_deck')}: стартовый набор</button></p>
+    <button class="btn secondary" id="c-import">${ic('download')} ${t('cards_deck')}: стартовый набор</button></p>
   </div>
   <div id="card-area"></div>`;
 };
@@ -1186,18 +1264,18 @@ ROUTES.cards.after = function(){
   };
   const due = dueCards().sort(()=>Math.random()-0.5);
   const area = $('#card-area');
-  if (!due.length){ area.innerHTML = `<div class="empty">🎉 ${t('cards_done')}</div>`; return; }
+  if (!due.length){ area.innerHTML = `<div class="empty">${ic('check')} ${t('cards_done')}</div>`; return; }
   let shown = null, revealed = false;
   function next(){
     shown = due[0]; revealed = false;
-    area.innerHTML = `<div class="flash"><div class="flash-inner" id="fl"><div class="q">${esc(shown.f)}<div class="muted" style="font-size:.75rem;margin-top:10px">${esc(shown.deck)} · 👆 ${t('cards_show')}</div></div></div></div>
+    area.innerHTML = `<div class="flash"><div class="flash-inner" id="fl"><div class="q">${esc(shown.f)}<div class="muted" style="font-size:.75rem;margin-top:10px">${esc(shown.deck)} · ${t('cards_show')}</div></div></div></div>
       <div class="rate-row hidden" id="rr">
-        <button class="btn danger" data-r="0">🙈 ${t('cards_again')}</button>
-        <button class="btn secondary" data-r="1">😅 ${t('cards_hard')}</button>
-        <button class="btn" data-r="2">🙂 ${t('cards_good')}</button>
-        <button class="btn" data-r="3">😎 ${t('cards_easy')}</button>
+        <button class="btn danger" data-r="0">${t('cards_again')}</button>
+        <button class="btn secondary" data-r="1">${t('cards_hard')}</button>
+        <button class="btn" data-r="2">${t('cards_good')}</button>
+        <button class="btn" data-r="3">${t('cards_easy')}</button>
       </div>
-      <p style="text-align:center"><button class="btn small danger" data-skip="1">🗑 ${t('delete')}</button></p>`;
+      <p style="text-align:center"><button class="btn small danger" data-skip="1">${ic('trash')} ${t('delete')}</button></p>`;
     $('#fl').onclick = ()=>{ if (revealed) return; revealed = true;
       $('#fl').innerHTML = `<div class="a">${esc(shown.b)}<div class="muted" style="font-size:.75rem;margin-top:10px">${esc(shown.f)}</div></div>`;
       $('#rr').classList.remove('hidden'); };
@@ -1208,7 +1286,7 @@ ROUTES.cards.after = function(){
       // streak
       const today = todayISO();
       if (S.lastReview !== today){ S.streak = (S.lastReview && daysBetween(S.lastReview, today)===1) ? (S.streak||0)+1 : 1; S.lastReview = today; }
-      save(); due.shift(); due.length ? next() : (area.innerHTML = `<div class="empty">🎉 ${t('cards_done')}</div>`);
+      save(); due.shift(); due.length ? next() : (area.innerHTML = `<div class="empty">${ic('check')} ${t('cards_done')}</div>`);
     });
     area.querySelector('[data-skip]').onclick = ()=>{ S.cards = S.cards.filter(c=>c.id!==shown.id); save(); due.shift(); due.length?next():go('cards'); };
   }
@@ -1229,8 +1307,8 @@ ROUTES.curation = function(){
     <label class="f">${t('cur_diag')}</label><input type="text" id="cur-diag">
     <label class="f">${t('cur_plan')}</label><textarea id="cur-plan"></textarea>
     ${visSelect('private')}
-    <p><button class="btn" id="cur-save">💾 ${t('save')}</button>
-    ${S.group?`<button class="btn secondary" id="cur-share">👥 ${t('vis_group')} → ${t('cases')}</button>`:''}</p>
+    <p><button class="btn" id="cur-save">${ic('save')} ${t('save')}</button>
+    ${S.group?`<button class="btn secondary" id="cur-share">${ic('users')} ${t('vis_group')} → ${t('cases')}</button>`:''}</p>
   </div>
   <div class="card"><h3>${t('nav_curation')} (${S.diary.length})</h3>
     ${S.diary.slice().reverse().map(d=>`<div class="entry">
@@ -1238,10 +1316,10 @@ ROUTES.curation = function(){
       <div><b>${esc(d.diag||'—')}</b></div>
       <div class="body muted" style="font-size:.86rem">${esc((d.cc||'').slice(0,160))}${(d.cc||'').length>160?'…':''}</div>
       <div class="entry-actions">
-        <button class="btn small secondary" data-view="${d.id}">👁</button>
-        <button class="btn small danger" data-cdel="${d.id}">🗑</button></div>
+        <button class="btn small secondary" data-view="${d.id}">${ic('eye')}</button>
+        <button class="btn small danger" data-cdel="${d.id}">${ic('trash')}</button></div>
     </div>`).join('') || `<div class="empty">${t('empty')}</div>`}
-    ${S.diary.length?`<p><button class="btn secondary small" id="cur-print">🖨 ${t('print')}</button>
+    ${S.diary.length?`<p><button class="btn secondary small" id="cur-print">${ic('printer')} ${t('print')}</button>
     <button class="btn secondary small" id="cur-pdf">⬇ PDF</button></p>`:''}
   </div>`;
 };
@@ -1329,12 +1407,12 @@ ROUTES.skills.after = function(){
     if (!S.group){
       S.localFeed.diary = S.localFeed.diary||[];
       S.localFeed.diary.unshift({id:uid(), ts:Date.now(), authorName:'Я',
-        title:`✅ ${t('skills_mine')}: ${done.length}/${window.SKILLS.length}`, body:done.join(', '), meta:{}, visibility:'private'});
+        title:`${t('skills_mine')}: ${done.length}/${window.SKILLS.length}`, body:done.join(', '), meta:{}, visibility:'private'});
       save(); return toast(t('saved'));
     }
     try { await api(`/groups/${S.group.code}/entries`,{method:'POST',body:{type:'diary',
       authorId:S.group.me.id, authorName:S.group.me.name,
-      title:`✅ ${t('skills_mine')}: ${done.length}/${window.SKILLS.length}`,
+      title:`${t('skills_mine')}: ${done.length}/${window.SKILLS.length}`,
       body:done.join(', '), meta:{}, visibility:'group'}});
       toast(t('posted')); } catch(e){ toast(e.message); }
   };
@@ -1364,7 +1442,7 @@ ROUTES.ops = function(){
   <div class="card">${S.ops.slice().reverse().map(o=>`<div class="entry">
     <div class="meta"><span class="badge ${o.role==='assistant'?'ok':''}">${o.role==='assistant'?t('ops_assistant'):t('ops_observer')}</span> <b>${o.date}</b></div>
     <div><b>${esc(o.op)}</b>${o.notes?` — <span class="muted">${esc(o.notes)}</span>`:''}</div>
-    <div class="entry-actions"><button class="btn small danger" data-odel="${o.id}">🗑</button></div></div>`).join('') ||
+    <div class="entry-actions"><button class="btn small danger" data-odel="${o.id}">${ic('trash')}</button></div></div>`).join('') ||
     `<div class="empty">${t('empty')}</div>`}</div>`;
 };
 ROUTES.ops.after = function(){
@@ -1438,17 +1516,17 @@ ROUTES.reflect = function(){
     <label class="f">${t('refl_err')}</label><textarea id="r-err"></textarea>
     <label class="f">${t('refl_lesson')}</label><textarea id="r-lesson"></textarea>
     <label class="f">${t('refl_topics')} (через запятую)</label><input type="text" id="r-topics">
-    <p><button class="btn" id="r-add">💾 ${t('save')}</button></p>
+    <p><button class="btn" id="r-add">${ic('save')} ${t('save')}</button></p>
   </div>
   <div class="card"><p><button class="btn secondary small" id="refl-pdf">⬇ PDF</button></p>
   ${S.reflect.slice().reverse().map(r=>`<div class="entry">
-    <div class="meta">🔒 <b>${r.date}</b></div>
+    <div class="meta">${ic('lock')} <b>${r.date}</b></div>
     <p><b>${t('refl_sit')}:</b> ${esc(r.sit)}</p>
     <p style="color:var(--danger)"><b>${t('refl_err')}:</b> ${esc(r.err)}</p>
     <p><b>${t('refl_lesson')}:</b> ${esc(r.lesson||'—')}</p>
-    ${(r.topics||[]).length?`<div class="chiprow">${r.topics.map(tp=>`<span class="chip" style="cursor:default">📌 ${esc(tp)}</span>`).join('')}</div>`:''}
-    ${(r.topics||[]).length?`<p><button class="btn small secondary" data-tocard="${r.id}">🃏 ${t('cards_to_deck')}</button></p>`:''}
-    <div class="entry-actions"><button class="btn small danger" data-rdel="${r.id}">🗑</button></div>
+    ${(r.topics||[]).length?`<div class="chiprow">${r.topics.map(tp=>`<span class="chip" style="cursor:default">${ic('pin')} ${esc(tp)}</span>`).join('')}</div>`:''}
+    ${(r.topics||[]).length?`<p><button class="btn small secondary" data-tocard="${r.id}">${ic('cards')} ${t('cards_to_deck')}</button></p>`:''}
+    <div class="entry-actions"><button class="btn small danger" data-rdel="${r.id}">${ic('trash')}</button></div>
   </div>`).join('') || `<div class="empty">${t('empty')}</div>`}</div>`;
 };
 ROUTES.reflect.after = function(){
@@ -1493,10 +1571,10 @@ ROUTES.duty = function(){
     <button class="btn secondary" id="duty-pdf">⬇ PDF</button></p>
   </div>
   <div class="card"><h3>${t('nav_duty')}</h3>
-    ${up.map(d=>`<div class="entry"><div class="meta">🛏 <b>${d.date}</b> · ${d.from}–${d.to} · ${esc(d.place||'—')} · ${d.hours} ${t('duty_hours').toLowerCase()}</div>
+    ${up.map(d=>`<div class="entry"><div class="meta">${ic('bed')} <b>${d.date}</b> · ${d.from}–${d.to} · ${esc(d.place||'—')} · ${d.hours} ${t('duty_hours').toLowerCase()}</div>
       <div class="entry-actions">
-        ${S.group?`<button class="btn small secondary" data-swap="${d.id}">🔁 ${t('duty_swap')}</button>`:''}
-        <button class="btn small danger" data-ddel="${d.id}">🗑</button></div></div>`).join('') ||
+        ${S.group?`<button class="btn small secondary" data-swap="${d.id}">${ic('swap')} ${t('duty_swap')}</button>`:''}
+        <button class="btn small danger" data-ddel="${d.id}">${ic('trash')}</button></div></div>`).join('') ||
       `<div class="empty">${t('empty')}</div>`}
   </div>
   <div id="swap-feed"></div>`;
@@ -1520,29 +1598,29 @@ ROUTES.duty.after = async function(){
     if (!S.group){
       S.localFeed['duty-swap'] = S.localFeed['duty-swap']||[];
       S.localFeed['duty-swap'].unshift({id:uid(), ts:Date.now(), authorName:'Я',
-        title:`🔁 ${t('duty_swap')}: ${d.date} ${d.from}–${d.to}`, body:d.place||'', meta:{date:d.date}, visibility:'private', localDutyId:d.id});
+        title:`${t('duty_swap')}: ${d.date} ${d.from}–${d.to}`, body:d.place||'', meta:{date:d.date}, visibility:'private', localDutyId:d.id});
       save(); toast(t('saved')); return loadSwaps();
     }
     try { await api(`/groups/${S.group.code}/entries`,{method:'POST',body:{type:'duty-swap',
       authorId:S.group.me.id, authorName:S.group.me.name,
-      title:`🔁 ${t('duty_swap')}: ${d.date} ${d.from}–${d.to}`, body:d.place||'', meta:{date:d.date},
+      title:`${t('duty_swap')}: ${d.date} ${d.from}–${d.to}`, body:d.place||'', meta:{date:d.date},
       visibility:'group'}});
       toast(t('posted')); loadSwaps(); } catch(e){ toast(e.message); }
   });
   async function loadSwaps(){
     const box = $('#swap-feed'); if (!box) return;
     const entries = (await fetchFeed('duty-swap')) || [];
-    box.innerHTML = feedBanner() + `<h3 style="margin:14px 0 8px">🔁 ${t('duty_swap')}</h3>` + ((entries.length) ?
-      entries.map(e=>entryHtml(e, `<button class="btn small" data-take="${e.id}">🙋 ${t('duty_taken')}</button>`)).join('')
+    box.innerHTML = feedBanner() + `<h3 style="margin:14px 0 8px">${ic('swap')} ${t('duty_swap')}</h3>` + ((entries.length) ?
+      entries.map(e=>entryHtml(e, `<button class="btn small" data-take="${e.id}">${ic('check')} ${t('duty_taken')}</button>`)).join('')
       : `<div class="empty">${t('feed_empty')}</div>`);
     box.querySelectorAll('[data-take]').forEach(btn=>btn.onclick=async()=>{
       if (!S.group){
         const e = (S.localFeed['duty-swap']||[]).find(x=>x.id===btn.dataset.take);
-        if (e){ e.meta.comments = e.meta.comments||[]; e.meta.comments.push({id:uid(), ts:Date.now(), authorName:'Я', text:'🙋‍♀️ ' + t('duty_taken')}); save(); }
+        if (e){ e.meta.comments = e.meta.comments||[]; e.meta.comments.push({id:uid(), ts:Date.now(), authorName:'Я', text:t('duty_taken')}); save(); }
         return loadSwaps();
       }
       try { await api(`/groups/${S.group.code}/entries/${btn.dataset.take}/comments`,{method:'POST',
-        body:{authorId:S.group.me.id, authorName:S.group.me.name, text:'🙋‍♀️ ' + t('duty_taken')}});
+        body:{authorId:S.group.me.id, authorName:S.group.me.name, text:t('duty_taken')}});
         toast(t('posted')); loadSwaps(); } catch(e){ toast(e.message); }
     });
     bindFeedActions(box, 'duty-swap', loadSwaps);
@@ -1554,7 +1632,7 @@ ROUTES.duty.after = async function(){
 ROUTES.setgroup = function(){
   const g = S.group;
   return head(t('nav_lang')) + `
-  <div class="card"><h3>🌐 ${t('set_lang')}</h3>
+  <div class="card"><h3>${ic('globe')} ${t('set_lang')}</h3>
     <div class="chiprow">
       <button class="chip ${S.lang==='ru'?'on':''}" data-l="ru">🇷🇺 Русский</button>
       <button class="chip ${S.lang==='uz'?'on':''}" data-l="uz">🇺🇿 Oʻzbekcha</button>
@@ -1562,7 +1640,7 @@ ROUTES.setgroup = function(){
     </div>
     <p class="muted" style="font-size:.8rem">${t('disclaimer')}</p>
   </div>
-  <div class="card"><h3>👥 ${t('set_group')}</h3>
+  <div class="card"><h3>${ic('users')} ${t('set_group')}</h3>
     <p id="static-note" class="muted" style="font-size:.84rem"></p>
     ${g?`<div class="entry">
       <div class="meta"><span class="badge ok">${g.code}</span> <b>${esc(g.name)}</b></div>
@@ -1610,33 +1688,33 @@ ROUTES.setgroup.after = function(){
   Store.ready.then(()=>{
     if (Store.isStatic()){
       const box = $('#static-note');
-      if (box) box.innerHTML = '📦 <b>Статический режим</b>: сайт развёрнут без сервера, поэтому группы, ленты и синхронизация хранятся только в этом браузере. Для обмена между устройствами задеплойте Node-версию (README → «Вариант Б») или запустите <code>npm start</code>.';
+      if (box) box.innerHTML = `${ic('box')} <b>Статический режим</b>: сайт развёрнут без сервера, поэтому группы, ленты и синхронизация хранятся только в этом браузере. Для обмена между устройствами задеплойте Node-версию (README → «Вариант Б») или запустите <code>npm start</code>.`;
     }
   });
   const mem = $('#grp-members');
   if (mem && S.group) api(`/groups/${S.group.code}`).then(j=>{
     mem.innerHTML = `<h3 style="font-size:.95rem">${t('group_members')} (${j.group.members.length})</h3>
-      <div class="chiprow">${j.group.members.map(m=>`<span class="badge">${m.role==='admin'?'👑':'🎓'} ${esc(m.name)}</span>`).join('')}</div>`;
+      <div class="chiprow">${j.group.members.map(m=>`<span class="badge">${m.role==='admin'?ic('crown'):ic('grad')} ${esc(m.name)}</span>`).join('')}</div>`;
   }).catch(()=>{});
 };
 
 /* ---------- SETTINGS: look ---------- */
 ROUTES.setlook = function(){
   return head(t('nav_look')) + `
-  <div class="card"><h3>🎨 ${t('set_theme')}</h3>
+  <div class="card"><h3>${ic('palette')} ${t('set_theme')}</h3>
     <div class="chiprow">
-      <button class="chip ${S.theme==='light'?'on':''}" data-th="light">☀️ ${t('theme_light')}</button>
-      <button class="chip ${S.theme==='dark'?'on':''}" data-th="dark">🌙 ${t('theme_dark')}</button>
-      <button class="chip ${S.theme==='night'?'on':''}" data-th="night">🔴 ${t('theme_night')}</button>
+      <button class="chip ${S.theme==='light'?'on':''}" data-th="light">${ic('sun')} ${t('theme_light')}</button>
+      <button class="chip ${S.theme==='dark'?'on':''}" data-th="dark">${ic('moon')} ${t('theme_dark')}</button>
+      <button class="chip ${S.theme==='night'?'on':''}" data-th="night">${ic('flame')} ${t('theme_night')}</button>
     </div>
   </div>
-  <div class="card"><h3>🖥 ${t('set_quality')}</h3>
+  <div class="card"><h3>${ic('monitor')} ${t('set_quality')}</h3>
     <div class="chiprow">
       <button class="chip ${S.quality==='low'?'on':''}" data-q="low">${t('quality_low')}</button>
       <button class="chip ${S.quality==='high'?'on':''}" data-q="high">${t('quality_high')}</button>
     </div>
   </div>
-  <div class="card"><h3>🏛 ${t('set_latin')}</h3>
+  <div class="card"><h3>${ic('book')} ${t('set_latin')}</h3>
     <p><button class="chip ${S.latin?'on':''}" id="latin-toggle">${S.latin?'✓ ':''}${t('latin_on')}</button></p>
   </div>`;
 };
@@ -1649,20 +1727,20 @@ ROUTES.setlook.after = function(){
 /* ---------- SETTINGS: data ---------- */
 ROUTES.setdata = function(){
   return head(t('nav_data')) + `
-  <div class="card"><h3>📥 ${t('set_offline')}</h3>
+  <div class="card"><h3>${ic('download')} ${t('set_offline')}</h3>
     <p class="muted" style="font-size:.85rem">МКБ, препараты, нормы, протоколы, калькуляторы, тесты и кейсы уже встроены в приложение и работают без интернета. Нажмите, чтобы закрепить кэш.</p>
     <p><button class="btn" id="off-dl">${S.basesOffline?'✓ ':'⬇ '}${t('offline_dl')}</button></p>
   </div>
-  <div class="card"><h3>💾 ${t('backup')}</h3>
+  <div class="card"><h3>${ic('save')} ${t('backup')}</h3>
     <p><button class="btn secondary" id="bk-export">⬇ ${t('backup_export')}</button>
     <label class="btn secondary" style="cursor:pointer">⬆ ${t('backup_import')}<input type="file" id="bk-import" accept=".json" hidden></label></p>
     <label class="f">${t('sync_key')}</label>
     <div style="display:flex;gap:8px"><input type="text" id="bk-key" value="${esc(S.syncKey)}" placeholder="мой-ключ-2026">
-    <button class="btn small" id="bk-up">☁ ↑</button><button class="btn small secondary" id="bk-down">☁ ↓</button></div>
+    <button class="btn small" id="bk-up">${ic('save')} ↑</button><button class="btn small secondary" id="bk-down">${ic('download')} ↓</button></div>
     <p class="muted" style="font-size:.8rem">Синхронизация по ключу: тот же ключ на другом устройстве подтянет данные.</p>
   </div>
-  <div class="card"><h3>📄 ${t('export_pdf')} / ${t('export_excel')}</h3>
-    <p><button class="btn secondary" id="ex-diary-print">🖨 ${t('nav_diary')} → ${t('print')}</button>
+  <div class="card"><h3>${ic('doc')} ${t('export_pdf')}</h3>
+    <p><button class="btn secondary" id="ex-diary-print">${ic('printer')} ${t('nav_diary')} → ${t('print')}</button>
     <button class="btn secondary" id="ex-diary-pdf">⬇ ${t('nav_diary')} → PDF</button>
     <button class="btn secondary" id="ex-grades-pdf">⬇ ${t('nav_grades')} → PDF</button>
     <button class="btn secondary" id="ex-duty-pdf">⬇ ${t('nav_duty')} → PDF</button></p>
@@ -1702,11 +1780,11 @@ ROUTES.setdata.after = function(){
 ROUTES.setnotif = function(){
   return head(t('set_notif')) + `
   <div class="card">
-    <p><button class="chip ${S.notif.duty?'on':''}" id="n-duty">🛏 ${t('notif_duty')}</button></p>
-    <p><button class="chip ${S.notif.colloq?'on':''}" id="n-colloq">❗ ${t('notif_colloq')}</button></p>
-    <p><button class="chip ${S.notif.cards?'on':''}" id="n-cards">🃏 ${t('notif_cards')}</button></p>
+    <p><button class="chip ${S.notif.duty?'on':''}" id="n-duty">${ic('bed')} ${t('notif_duty')}</button></p>
+    <p><button class="chip ${S.notif.colloq?'on':''}" id="n-colloq">${ic('warn')} ${t('notif_colloq')}</button></p>
+    <p><button class="chip ${S.notif.cards?'on':''}" id="n-cards">${ic('cards')} ${t('notif_cards')}</button></p>
     <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
-    <p><button class="btn" id="n-ask">🔔 ${t('notif_ask')}</button>
+    <p><button class="btn" id="n-ask">${ic('bell')} ${t('notif_ask')}</button>
     <button class="btn secondary" id="n-test">${t('notif_test')}</button></p>
     <p class="muted" id="n-status" style="font-size:.82rem"></p>
   </div>`;
@@ -1715,8 +1793,8 @@ ROUTES.setnotif.after = function(){
   const tog = (id, key)=>{ $(id).onclick = ()=>{ S.notif[key]=!S.notif[key]; save(); go('setnotif'); }; };
   tog('#n-duty','duty'); tog('#n-colloq','colloq'); tog('#n-cards','cards');
   const status = $('#n-status');
-  const upd = ()=>{ status.textContent = Notification.permission==='granted'?'✅ '+t('notif_ask'):
-    Notification.permission==='denied'?'⛔ '+t('notif_denied'):''; };
+  const upd = ()=>{ status.textContent = Notification.permission==='granted'?ic('check')+' '+t('notif_ask'):
+    Notification.permission==='denied'?ic('x')+' '+t('notif_denied'):''; };
   $('#n-ask').onclick = ()=>Notification.requestPermission().then(upd);
   $('#n-test').onclick = ()=>notify('MedHub', t('notif_test'));
   if ('Notification' in window) upd();
@@ -1724,7 +1802,7 @@ ROUTES.setnotif.after = function(){
 function notify(title, body){
   if (!('Notification' in window)) return toast(body);
   if (Notification.permission==='granted') new Notification(title, {body});
-  else toast('🔔 ' + body);
+  else toast(body);
 }
 /* periodic checks */
 setInterval(()=>{
@@ -1736,10 +1814,10 @@ setInterval(()=>{
   }
   if (S.notif.duty){
     const d = S.duties.find(x=>x.date===new Date(Date.now()+86400000).toISOString().slice(0,10));
-    if (d && !notify._dutyDone){ notify._dutyDone = t0; notify('MedHub', `🛏 ${t('notif_duty')}: ${d.date} ${d.from}–${d.to}`); }
+    if (d && !notify._dutyDone){ notify._dutyDone = t0; notify('MedHub', `${ic('bed')} ${t('notif_duty')}: ${d.date} ${d.from}–${d.to}`); }
   }
   if (S.notif.cards && dueCards().length>5 && new Date().getHours()===19 && !notify._cardsDone){
-    notify._cardsDone = t0; notify('MedHub', `🃏 ${t('cards_due')}: ${dueCards().length}`);
+    notify._cardsDone = t0; notify('MedHub', `${ic('cards')} ${t('cards_due')}: ${dueCards().length}`);
   }
 }, 60000);
 
@@ -1759,6 +1837,601 @@ document.addEventListener('click', e=>{
   const g = e.target.closest('[data-goto]');
   if (g){ e.preventDefault(); go(g.dataset.goto); }
 });
+/* ================= ДОСКА (белая доска для ТВ/проектора) ================= */
+const Board = (function(){
+  const LS = 'medhub_board_v1';
+  let cv=null, ctx=null, wrap=null, ro=null;
+  let objs=[], view={ox:0, oy:0, scale:1};
+  let undoS=[], redoS=[];
+  let tool='pen', color='#1f2937', width=4, gridOn=true;
+  let cur=null, sel=null, pan=null, dragSel=null, spaceDown=false;
+  let editTa=null, editObj=null, editNew=false, editPos=null;
+  let imgCache={};
+  let saveT=null;
+  const PALETTE=['#1f2937','#dc2626','#2563eb','#16a34a','#d97706','#7c3aed'];
+  const WIDTHS=[3,5,9,16];
+
+  const clone = o => JSON.parse(JSON.stringify(o));
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+
+  function norm(o){
+    if ((o.type==='rect'||o.type==='ellipse') && (o.w<0||o.h<0)){
+      if (o.w<0){ o.x+=o.w; o.w=-o.w; }
+      if (o.h<0){ o.y+=o.h; o.h=-o.h; }
+    }
+    if ((o.type==='line'||o.type==='arrow') && (o.x2<o.x1)){ const t=o.x1; o.x1=o.x2; o.x2=t; const t2=o.y1; o.y1=o.y2; o.y2=t2; }
+    return o;
+  }
+  function pushUndo(){ undoS.push(clone(objs)); if (undoS.length>60) undoS.shift(); redoS.length=0; }
+  function undo(){ if(!undoS.length) return; redoS.push(clone(objs)); objs=undoS.pop(); sel=null; draw(); persist(); updBtns(); }
+  function redo(){ if(!redoS.length) return; undoS.push(clone(objs)); objs=redoS.pop(); sel=null; draw(); persist(); updBtns(); }
+  function persist(){
+    clearTimeout(saveT); saveT=setTimeout(()=>{ try{ localStorage.setItem(LS, JSON.stringify({objs, view})); }catch(e){} }, 500); }
+
+  /* ---------- координаты ---------- */
+  function toWorld(e){
+    const r = cv.getBoundingClientRect();
+    return [ (e.clientX - r.left - view.ox)/view.scale, (e.clientY - r.top - view.oy)/view.scale ];
+  }
+  function toScreen(x, y){
+    return [ x*view.scale + view.ox, y*view.scale + view.oy ];
+  }
+  function updZoom(){
+    if (!wrap) return;
+    const v=wrap.querySelector('.bz-val');
+    if (v) v.textContent=Math.round(view.scale*100)+'%';
+  }
+
+  /* ---------- рисование ---------- */
+  function rr(x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+  }
+  function drawObj(o){
+    ctx.save();
+    ctx.lineCap='round'; ctx.lineJoin='round';
+    ctx.strokeStyle=o.color||color; ctx.fillStyle=o.color||color; ctx.lineWidth=o.size||4;
+    if (o.type==='pen'){
+      ctx.beginPath();
+      o.pts.forEach((p,i)=> i? ctx.lineTo(p[0],p[1]) : ctx.moveTo(p[0],p[1]));
+      if (o.pts.length===1){ ctx.lineTo(o.pts[0][0]+.5, o.pts[0][1]+.5); }
+      ctx.stroke();
+    } else if (o.type==='line'){
+      ctx.beginPath(); ctx.moveTo(o.x1,o.y1); ctx.lineTo(o.x2,o.y2); ctx.stroke();
+    } else if (o.type==='arrow'){
+      ctx.beginPath(); ctx.moveTo(o.x1,o.y1); ctx.lineTo(o.x2,o.y2); ctx.stroke();
+      const a=Math.atan2(o.y2-o.y1, o.x2-o.x1), h=Math.max(11,(o.size||4)*3);
+      ctx.beginPath();
+      ctx.moveTo(o.x2,o.y2);
+      ctx.lineTo(o.x2-h*Math.cos(a-.42), o.y2-h*Math.sin(a-.42));
+      ctx.moveTo(o.x2,o.y2);
+      ctx.lineTo(o.x2-h*Math.cos(a+.42), o.y2-h*Math.sin(a+.42));
+      ctx.stroke();
+    } else if (o.type==='rect'){
+      ctx.strokeRect(o.x,o.y,o.w,o.h);
+    } else if (o.type==='ellipse'){
+      ctx.beginPath(); ctx.ellipse(o.x+o.w/2,o.y+o.h/2,Math.abs(o.w/2),Math.abs(o.h/2),0,0,Math.PI*2); ctx.stroke();
+    } else if (o.type==='text'){
+      ctx.font=(o.size||22)+'px "DejaVu Sans", system-ui, sans-serif';
+      ctx.textBaseline='top';
+      (o.text||'').split('\n').forEach((ln,i)=> ctx.fillText(ln, o.x, o.y+i*(o.size||22)*1.28));
+    } else if (o.type==='note'){
+      ctx.save();
+      ctx.shadowColor='rgba(15,23,42,.18)'; ctx.shadowBlur=10/view.scale; ctx.shadowOffsetY=3;
+      ctx.fillStyle=o.bg||'#fde68a';
+      rr(o.x,o.y,o.w,o.h,6); ctx.fill();
+      ctx.restore();
+      ctx.fillStyle='#78350f';
+      ctx.font='16px "DejaVu Sans", system-ui, sans-serif';
+      ctx.textBaseline='top';
+      const words=(o.text||'').split(/\s+/); let line='', ly=o.y+10;
+      const maxW=o.w-20;
+      words.forEach(w=>{
+        const t2=line?line+' '+w:w;
+        if (ctx.measureText(t2).width>maxW && line){ ctx.fillText(line,o.x+10,ly); ly+=20; line=w; }
+        else line=t2;
+      });
+      if (line) ctx.fillText(line,o.x+10,ly);
+    } else if (o.type==='img' && imgCache[o.src] && imgCache[o.src].complete){
+      ctx.drawImage(imgCache[o.src], o.x, o.y, o.w, o.h);
+    }
+    ctx.restore();
+  }
+  function bboxOf(o){
+    if (o.type==='pen'){
+      let x1=1e9,y1=1e9,x2=-1e9,y2=-1e9;
+      o.pts.forEach(p=>{ x1=Math.min(x1,p[0]); y1=Math.min(y1,p[1]); x2=Math.max(x2,p[0]); y2=Math.max(y2,p[1]); });
+      return [x1,y1,x2,y2];
+    }
+    if (o.type==='line'||o.type==='arrow') return [Math.min(o.x1,o.x2),Math.min(o.y1,o.y2),Math.max(o.x1,o.x2),Math.max(o.y1,o.y2)];
+    if (o.type==='text'){
+      const fs=o.size||22, lines=(o.text||'').split('\n');
+      let w=10; ctx.font=fs+'px "DejaVu Sans", system-ui, sans-serif';
+      lines.forEach(ln=> w=Math.max(w, ctx.measureText(ln).width));
+      return [o.x,o.y,o.x+w,o.y+lines.length*fs*1.3];
+    }
+    if (o.type==='img') return [o.x,o.y,o.x+o.w,o.y+o.h];
+    return [o.x,o.y,o.x+(o.w||0),o.y+(o.h||0)];
+  }
+  function draw(){
+    if (!ctx) return;
+    const dpr=window.devicePixelRatio||1;
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.clearRect(0,0,cv.width,cv.height);
+    ctx.fillStyle='#f8fafc';
+    ctx.fillRect(0,0,cv.width,cv.height);
+    ctx.setTransform(dpr*view.scale,0,0,dpr*view.scale,dpr*view.ox,dpr*view.oy);
+    const w=cv.width/dpr, h=cv.height/dpr;
+    const wx0=-view.ox/view.scale, wy0=-view.oy/view.scale;
+    const wx1=(w-view.ox)/view.scale, wy1=(h-view.oy)/view.scale;
+    if (gridOn){
+      const step=34;
+      ctx.save();
+      ctx.strokeStyle='#dbe3ee'; ctx.lineWidth=1/view.scale;
+      ctx.beginPath();
+      for(let x=Math.floor(wx0/step)*step; x<=wx1; x+=step){ ctx.moveTo(x,wy0); ctx.lineTo(x,wy1); }
+      for(let y=Math.floor(wy0/step)*step; y<=wy1; y+=step){ ctx.moveTo(wx0,y); ctx.lineTo(wx1,y); }
+      ctx.stroke(); ctx.restore();
+    }
+    objs.forEach(drawObj);
+    if (sel){
+      const b=bboxOf(sel), pad=8;
+      ctx.save();
+      ctx.strokeStyle='#2563eb'; ctx.lineWidth=1.5/view.scale; ctx.setLineDash([6/view.scale,4/view.scale]);
+      ctx.strokeRect(b[0]-pad,b[1]-pad,b[2]-b[0]+pad*2,b[3]-b[1]+pad*2);
+      ctx.restore();
+    }
+  }
+  function resize(){
+    if (!wrap||!cv) return;
+    const dpr=window.devicePixelRatio||1, r=wrap.getBoundingClientRect();
+    cv.width=Math.round(r.width*dpr); cv.height=Math.round(r.height*dpr);
+    cv.style.width=r.width+'px'; cv.style.height=r.height+'px';
+    draw();
+  }
+
+  /* ---------- hit-test ---------- */
+  function distSeg(px,py,x1,y1,x2,y2){
+    const dx=x2-x1, dy=y2-y1, L=dx*dx+dy*dy;
+    let t = L? ((px-x1)*dx+(py-y1)*dy)/L : 0;
+    t=Math.max(0,Math.min(1,t));
+    const qx=x1+t*dx, qy=y1+t*dy;
+    return Math.hypot(px-qx,py-qy);
+  }
+  function hit(wx,wy){
+    for (let i=objs.length-1;i>=0;i--){
+      const o=objs[i], tol=(o.size||16)/2+6/view.scale;
+      if (o.type==='pen'){
+        for (let j=1;j<o.pts.length;j++) if (distSeg(wx,wy,o.pts[j-1][0],o.pts[j-1][1],o.pts[j][0],o.pts[j][1])<tol) return o;
+        if (o.pts.length===1 && Math.hypot(wx-o.pts[0][0],wy-o.pts[0][1])<tol) return o;
+      } else if (o.type==='line'||o.type==='arrow'){
+        if (distSeg(wx,wy,o.x1,o.y1,o.x2,o.y2)<tol) return o;
+      } else if (o.type==='rect'||o.type==='note'||o.type==='img'){
+        if (wx>=o.x-tol && wx<=o.x+o.w+tol && wy>=o.y-tol && wy<=o.y+o.h+tol) return o;
+      } else if (o.type==='ellipse'){
+        const cx=o.x+o.w/2, cy=o.y+o.h/2, rx=Math.abs(o.w/2)+tol, ry=Math.abs(o.h/2)+tol;
+        if (((wx-cx)/rx)**2 + ((wy-cy)/ry)**2 <= 1) return o;
+      } else if (o.type==='text'){
+        const b=bboxOf(o);
+        if (wx>=b[0]-4 && wx<=b[2]+4 && wy>=b[1] && wy<=b[3]+4) return o;
+      }
+    }
+    return null;
+  }
+  function translate(o,dx,dy){
+    if (o.type==='pen') o.pts=o.pts.map(p=>[p[0]+dx,p[1]+dy]);
+    else if (o.type==='line'||o.type==='arrow'){ o.x1+=dx; o.y1+=dy; o.x2+=dx; o.y2+=dy; }
+    else { o.x+=dx; o.y+=dy; }
+  }
+
+  /* ---------- редактор текста ---------- */
+  function closeEditor(commit){
+    if (!editTa) return;
+    const ta=editTa, obj=editObj, isNew=editNew, pos=editPos;
+    editTa=null; editObj=null; editNew=false; editPos=null;
+    try{ ta.remove(); }catch(_e){}
+    const val=ta.value.trim();
+    if (commit && val){
+      if (isNew){
+        objs.push({id:uid(),type:'text',x:pos.x,y:pos.y,text:val,color,size:22});
+        sel=null;
+      } else {
+        obj.text=val;
+      }
+      persist();
+    }
+    draw();
+  }
+  function pushUndoIfSel(){ /* без undo для правки текста — упрощение */ }
+  function openEditor(o, wx, wy){
+    closeEditor(false);
+    editObj=o; editNew=!o; editPos={x:wx||0,y:wy||0};
+    const ta=document.createElement('textarea');
+    ta.id='board-edit';
+    ta.className='board-edit' + (o&&o.type==='note'?' is-note':'');
+    ta.placeholder = o&&o.type==='note' ? t('board_note_ph') : t('board_text_ph');
+    const [sx,sy]=toScreen(o?o.x:wx, o?o.y:wy);
+    const r=wrap.getBoundingClientRect();
+    ta.style.left=(sx)+'px'; ta.style.top=(sy)+'px';
+    if (o){ ta.value=o.text||''; if(o.type==='note'){ ta.style.width=o.w+'px'; ta.style.height=o.h+'px'; } }
+    ta.style.fontSize=((o&&o.size)||22)*view.scale+'px';
+    ta.style.color=(o&&o.color)||color;
+    wrap.appendChild(ta);
+    editTa=ta;
+    setTimeout(()=>{ ta.focus(); ta.setSelectionRange(ta.value.length,ta.value.length); },0);
+    ta.addEventListener('keydown', e=>{
+      e.stopPropagation();
+      if (e.key==='Enter' && !e.shiftKey){ e.preventDefault(); closeEditor(true); }
+      if (e.key==='Escape'){ closeEditor(false); }
+    });
+    ta.addEventListener('blur', ()=> closeEditor(true));
+  }
+
+  /* ---------- события ---------- */
+  function onDown(e){
+    if (e.button===1 || tool==='pan' || spaceDown){
+      pan={x:e.clientX,y:e.clientY,ox:view.ox,oy:view.oy};
+      try{cv.setPointerCapture(e.pointerId);}catch(_e){} return;
+    }
+    if (e.button!==0) return;
+    closeEditor(true);
+    const [wx,wy]=toWorld(e);
+    if (tool==='select'){
+      const o=hit(wx,wy);
+      sel=o;
+      if (o){ dragSel={o,dx:wx,dy:wy,moved:false,orig:clone(objs)}; }
+      draw(); updBtns(); return;
+    }
+    if (tool==='erase'){
+      const o=hit(wx,wy);
+      if (o){ pushUndo(); objs=objs.filter(x=>x!==o); if(sel===o)sel=null; draw(); persist(); updBtns(); }
+      cur={erase:true}; cv.setPointerCapture(e.pointerId); return;
+    }
+    if (tool==='text'){ openEditor(null,wx,wy); return; }
+    if (tool==='note'){
+      pushUndo();
+      objs.push({id:uid(),type:'note',x:wx,y:wy,w:180,h:120,text:'',bg:'#fde68a'});
+      const o=objs[objs.length-1];
+      draw(); persist();
+      openEditor(o,wx,wy);
+      return;
+    }
+    if (tool==='pen'){
+      pushUndo();
+      objs.push({id:uid(),type:'pen',pts:[[wx,wy]],color,size:width});
+      cur=objs[objs.length-1]; try{cv.setPointerCapture(e.pointerId);}catch(_e){} return;
+    }
+    // фигуры
+    pushUndo();
+    const base={id:uid(),color,size:width};
+    let o;
+    if (tool==='line'||tool==='arrow') o=Object.assign(base,{type:tool,x1:wx,y1:wy,x2:wx,y2:wy});
+    else o=Object.assign(base,{type:tool,x:wx,y:wy,w:0,h:0});
+    objs.push(o); cur=o; try{cv.setPointerCapture(e.pointerId);}catch(_e){}
+  }
+  function onMove(e){
+    if (pan){
+      view.ox=pan.ox+(e.clientX-pan.x); view.oy=pan.oy+(e.clientY-pan.y);
+      draw(); return;
+    }
+    if (dragSel){
+      const [wx,wy]=toWorld(e);
+      if (!dragSel.moved){ if (Math.hypot(wx-dragSel.dx,wy-dragSel.dy)<2/view.scale) return; dragSel.moved=true; objs=clone(dragSel.orig); dragSel.o=objs.find(x=>x.id===dragSel.o.id)||dragSel.o; sel=dragSel.o; }
+      translate(sel, wx-dragSel.dx, wy-dragSel.dy);
+      dragSel.dx=wx; dragSel.dy=wy;
+      draw(); return;
+    }
+    if (cur && cur.erase){
+      const [wx,wy]=toWorld(e);
+      const o=hit(wx,wy);
+      if (o){ objs=objs.filter(x=>x!==o); draw(); persist(); updBtns(); }
+      return;
+    }
+    if (!cur) return;
+    const [wx,wy]=toWorld(e);
+    if (cur.type==='pen'){ cur.pts.push([wx,wy]); }
+    else if (cur.type==='line'||cur.type==='arrow'){ cur.x2=wx; cur.y2=wy; }
+    else { cur.w=wx-cur.x; cur.h=wy-cur.y; }
+    draw();
+  }
+  function onUp(){
+    if (pan){ pan=null; persist(); return; }
+    if (dragSel){ if (dragSel.moved) persist(); dragSel=null; updBtns(); return; }
+    if (cur){
+      if (cur.type!=='pen' && cur.type!=='line' && cur.type!=='arrow'){
+        if (Math.abs(cur.w)<3 && Math.abs(cur.h)<3){ cur.w=cur.w<0?-60:60; cur.h=cur.h<0?-60:60; if(cur.type==='ellipse'){cur.h=cur.w;} }
+      }
+      if (cur.type==='pen' && cur.pts.length<2){ cur.pts.push([cur.pts[0][0]+.6,cur.pts[0][1]+.6]); }
+      cur=null; draw(); persist(); updBtns();
+    }
+  }
+  function onWheel(e){
+    e.preventDefault();
+    const r=cv.getBoundingClientRect();
+    const mx=e.clientX-r.left, my=e.clientY-r.top;
+    if (!(e.ctrlKey||e.metaKey)){
+      view.ox-=e.deltaX; view.oy-=e.deltaY;
+      if (editTa) positionEditor();
+      draw(); persist(); updZoom();
+      return;
+    }
+    const k=e.deltaY<0?1.12:1/1.12;
+    const ns=Math.max(.15,Math.min(8,view.scale*k));
+    const kk=ns/view.scale;
+    view.ox=mx-(mx-view.ox)*kk; view.oy=my-(my-view.oy)*kk; view.scale=ns;
+    if (editTa) positionEditor();
+    draw(); persist(); updZoom();
+  }
+  function positionEditor(){
+    if (!editTa||!editObj) return;
+    const [sx,sy]=toScreen(editObj.x,editObj.y);
+    editTa.style.left=sx+'px'; editTa.style.top=sy+'px';
+    editTa.style.fontSize=((editObj.size)||22)*view.scale+'px';
+  }
+
+  /* ---------- зум/fit ---------- */
+  function fit(){
+    if (!objs.length){ view={ox:0,oy:0,scale:1}; draw(); persist(); return; }
+    let x1=1e9,y1=1e9,x2=-1e9,y2=-1e9;
+    objs.forEach(o=>{ const b=bboxOf(o); x1=Math.min(x1,b[0]); y1=Math.min(y1,b[1]); x2=Math.max(x2,b[2]); y2=Math.max(y2,b[3]); });
+    const w=cv.width/(window.devicePixelRatio||1), h=cv.height/(window.devicePixelRatio||1);
+    const pad=50;
+    const s=Math.max(.15,Math.min(3, Math.min((w-pad*2)/Math.max(1,x2-x1), (h-pad*2)/Math.max(1,y2-y1))));
+    view.scale=s;
+    view.ox=(w-(x2-x1)*s)/2 - x1*s;
+    view.oy=(h-(y2-y1)*s)/2 - y1*s;
+    draw(); persist();
+  }
+  function zoom(k){
+    const w=cv.width/(window.devicePixelRatio||1), h=cv.height/(window.devicePixelRatio||1);
+    const mx=w/2, my=h/2;
+    const ns=Math.max(.15,Math.min(8,view.scale*k)), kk=ns/view.scale;
+    view.ox=mx-(mx-view.ox)*kk; view.oy=my-(my-view.oy)*kk; view.scale=ns;
+    draw(); persist(); updZoom();
+  }
+
+  /* ---------- экспорт ---------- */
+  function renderExport(scaleUp){
+    if (!objs.length) return null;
+    let x1=1e9,y1=1e9,x2=-1e9,y2=-1e9;
+    objs.forEach(o=>{ const b=bboxOf(o); x1=Math.min(x1,b[0]); y1=Math.min(y1,b[1]); x2=Math.max(x2,b[2]); y2=Math.max(y2,b[3]); });
+    const pad=40, W=x2-x1+pad*2, H=y2-y1+pad*2;
+    const off=document.createElement('canvas');
+    off.width=Math.min(4000,Math.round(W*scaleUp)); off.height=Math.min(4000,Math.round(H*scaleUp));
+    const sc=Math.min(off.width/W, off.height/H);
+    const c2=off.getContext('2d');
+    c2.fillStyle='#ffffff'; c2.fillRect(0,0,off.width,off.height);
+    c2.setTransform(sc,0,0,sc,pad*sc-x1*sc,pad*sc-y1*sc);
+    const main=ctx; ctx=c2; gridOn=false; objs.forEach(drawObj); ctx=main; gridOn=true;
+    return off;
+  }
+  function png(){
+    const off=renderExport(2);
+    if (!off) return;
+    const a=document.createElement('a');
+    a.download='medhub-board-'+Date.now()+'.png';
+    a.href=off.toDataURL('image/png');
+    a.click();
+  }
+  function pdf(){
+    const off=renderExport(2);
+    if (!off) return;
+    const load=(src)=>new Promise((res,rej)=>{ const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s); });
+    Promise.resolve()
+      .then(()=> window.jspdf ? null : load('vendor/jspdf.umd.min.js'))
+      .then(()=>{
+        const {jsPDF}=window.jspdf;
+        const d=new jsPDF({orientation: off.width>off.height?'l':'p', unit:'pt', format:'a4'});
+        const pw=d.internal.pageSize.getWidth(), ph=d.internal.pageSize.getHeight();
+        const k=Math.min(pw/ph>off.width/off.height ? (ph-40)/off.height : (pw-40)/off.width, 1e9);
+        const w=off.width*k, h=off.height*k;
+        d.addImage(off.toDataURL('image/jpeg',.92),'JPEG',(pw-w)/2,(ph-h)/2,w,h);
+        d.save('medhub-board-'+Date.now()+'.pdf');
+      }).catch(()=>{});
+  }
+
+  /* ---------- снимки из атласа ---------- */
+  function imageBank(){
+    const out=[];
+    (window.ANAT_LIB||[]).forEach(a=>{ if (a.img) out.push({src:a.img, t:a.title||a.name||''}); });
+    (window.ATLAS||[]).forEach(a=>{ if (a.img) out.push({src:a.img, t:a.title||a.name||''}); });
+    return out;
+  }
+  function addImage(src){
+    let im=imgCache[src];
+    if (!im){ im=new Image(); im.src=src; imgCache[src]=im; }
+    const place=()=>{
+      pushUndo();
+      const w=cv.width/(window.devicePixelRatio||1), h=cv.height/(window.devicePixelRatio||1);
+      const maxW=w*0.5, maxH=h*0.7;
+      let iw=im.naturalWidth||600, ih=im.naturalHeight||800;
+      const k=Math.min(maxW/iw, maxH/ih);
+      iw*=k; ih*=k;
+      const wx=(w/2-view.ox/view.scale)-iw/2, wy=(h/2-view.oy/view.scale)-ih/2;
+      objs.push({id:uid(),type:'img',x:Math.round(wx),y:Math.round(wy),w:Math.round(iw),h:Math.round(ih),src});
+      draw(); persist(); updBtns();
+    };
+    if (im.complete) place(); else { im.onload=place; im.onerror=()=>{}; }
+  }
+  function picker(){
+    const old=wrap.querySelector('.board-picker');
+    if (old){ old.remove(); return; }
+    const items=imageBank().filter(a=>!/\.(svg|mp3)$/i.test(a.src));
+    const p=document.createElement('div');
+    p.className='board-picker';
+    p.innerHTML='<div class="bp-title">'+ic('image')+' '+t('board_image')+'</div><div class="bp-grid"></div>';
+    const g=p.querySelector('.bp-grid');
+    items.forEach(a=>{
+      const b=document.createElement('button');
+      b.className='bp-item';
+      b.innerHTML='<img loading="lazy" src="'+a.src+'" alt=""><span></span>';
+      b.querySelector('span').textContent=a.t;
+      b.onclick=()=>{ p.remove(); addImage(a.src); };
+      g.appendChild(b);
+    });
+    if (!items.length) g.innerHTML='<div class="muted small">—</div>';
+    const x=document.createElement('button');
+    x.className='bp-close'; x.textContent='✕';
+    x.onclick=()=>p.remove();
+    p.appendChild(x);
+    wrap.appendChild(p);
+  }
+
+  /* ---------- кнопки/тулбар ---------- */
+  function tbtn(tool2, icon, key, extra){
+    return '<button class="btool'+(extra||'')+'" data-tool="'+tool2+'" title="'+esc(t(key))+'">'+ic(icon)+'</button>';
+  }
+  function updBtns(){
+    if (!wrap) return;
+    wrap.querySelectorAll('.btool[data-tool]').forEach(b=> b.classList.toggle('active', b.dataset.tool===tool));
+    const u=wrap.querySelector('[data-act=undo]'), r=wrap.querySelector('[data-act=redo]');
+    if (u) u.disabled=!undoS.length;
+    if (r) r.disabled=!redoS.length;
+  }
+  function setTool(t2){ closeEditor(true); sel=null; tool=t2; draw(); updBtns(); syncCursor(); }
+  function syncCursor(){
+    if (!cv) return;
+    cv.style.cursor = tool==='pan' ? 'grab' : tool==='select' ? 'default' : tool==='text'||tool==='note' ? 'text' : 'crosshair';
+  }
+
+  function mount(){
+    wrap=$('#board-wrap'); cv=$('#board-cv');
+    if (!wrap||!cv) return;
+    ctx=cv.getContext('2d');
+    try{
+      const saved=JSON.parse(localStorage.getItem(LS)||'null');
+      if (saved && Array.isArray(saved.objs)){ objs=saved.objs; view=saved.view||view; }
+      else { objs=[]; view={ox:0,oy:0,scale:1}; }
+    }catch(e){ objs=[]; }
+    undoS=[]; redoS=[]; sel=null; tool='pen';
+    (objs.filter(o=>o.type==='img')).forEach(o=>{
+      if (!imgCache[o.src]){ const im=new Image(); im.src=o.src; imgCache[o.src]=im; }
+    });
+    ro=new ResizeObserver(resize); ro.observe(wrap);
+    cv.addEventListener('pointerdown', onDown);
+    cv.addEventListener('pointermove', onMove);
+    cv.addEventListener('pointerup', onUp);
+    cv.addEventListener('pointercancel', onUp);
+    cv.addEventListener('wheel', onWheel, {passive:false});
+    cv.addEventListener('dblclick', e=>{
+      const [wx,wy]=toWorld(e);
+      const o=hit(wx,wy);
+      if (o && (o.type==='text'||o.type==='note')) openEditor(o);
+    });
+    const gb=wrap.querySelector('[data-act=grid]'); if (gb) gb.classList.add('active');
+    bindUi();
+    resize(); updBtns(); syncCursor(); updZoom();
+  }
+  function unmount(){
+    closeEditor(false);
+    if (ro){ ro.disconnect(); ro=null; }
+    wrap=null; cv=null; ctx=null;
+  }
+
+  function shortcuts(e){
+    if (!wrap || document.activeElement && (document.activeElement.tagName==='INPUT'||document.activeElement.tagName==='TEXTAREA')) return;
+    if (e.code==='Space'){ spaceDown=true; }
+    const k=e.key.toLowerCase();
+    if ((e.ctrlKey||e.metaKey) && k==='z'){ e.preventDefault(); e.shiftKey?redo():undo(); return; }
+    if ((e.ctrlKey||e.metaKey) && k==='y'){ e.preventDefault(); redo(); return; }
+    if (e.key==='Delete'||e.key==='Backspace'){
+      if (sel){ pushUndo(); objs=objs.filter(x=>x!==sel); sel=null; draw(); persist(); updBtns(); }
+      return;
+    }
+    if (e.key==='Escape'){ sel=null; draw(); return; }
+    const map={v:'select',p:'pen',e:'erase',l:'line',a:'arrow',r:'rect',o:'ellipse',t:'text',n:'note',h:'pan'};
+    if (map[k] && !e.ctrlKey && !e.metaKey && !e.altKey) setTool(map[k]);
+  }
+  function shortcutsUp(e){ if (e.code==='Space') spaceDown=false; }
+
+  function init(){
+    document.addEventListener('keydown', shortcuts);
+    document.addEventListener('keyup', shortcutsUp);
+    document.addEventListener('fullscreenchange', ()=>{ if (wrap) setTimeout(resize,60); });
+  }
+
+  function toolbarHtml(){
+    const tools=[['select','cursor','board_select'],['pen','pen','board_pen'],['erase','eraser','board_erase'],
+      ['line','bline','board_line'],['arrow','barrow','board_arrow'],['rect','brect','board_rect'],
+      ['ellipse','bellipse','board_ellipse'],['text','btext','board_text'],['note','note','board_note'],['pan','move','board_pan']];
+    const acts=[['undo','undo','board_undo'],['redo','redo','board_redo'],['grid','grid','board_grid'],
+      ['image','image','board_image'],['png','download','board_png'],['pdf','file','board_pdf'],
+      ['clear','trash2','board_clear'],['full','fullscreen','board_full']];
+    const zooms=[['zin','zoomin','board_zoom_in'],['zout','zoomout','board_zoom_out'],['fit2','fit','board_fit']];
+    return `
+    <div class="board-tools glass">
+      ${tools.map(x=>tbtn(x[0],x[1],x[2])).join('')}
+      <div class="bsep"></div>
+      <div class="bpal">${PALETTE.map(c=>`<button class="bcolor${c===color?' active':''}" data-color="${c}" style="background:${c}" title="${c}"></button>`).join('')}</div>
+      <div class="bsep"></div>
+      <div class="bwidths">${WIDTHS.map(w=>`<button class="bw${w===width?' active':''}" data-w="${w}"><i style="width:${Math.min(18,4+w*1.1)}px;height:${Math.min(18,4+w*1.1)}px"></i></button>`).join('')}</div>
+    </div>
+    <div class="board-acts glass">
+      ${acts.map(x=>`<button class="btool" data-act="${x[0]}" title="${esc(t(x[2]))}">${ic(x[1])}</button>`).join('')}
+    </div>
+    <div class="board-zoom glass">
+      ${zooms.map(x=>`<button class="btool" data-zoom="${x[0]}" title="${esc(t(x[2]))}">${ic(x[1])}</button>`).join('')}
+      <span class="bz-val">${Math.round(view.scale*100)}%</span>
+    </div>`;
+  }
+
+  function bindUi(){
+    wrap.addEventListener('click', e=>{
+      const tb=e.target.closest('[data-tool]');
+      if (tb){ setTool(tb.dataset.tool); return; }
+      const cb=e.target.closest('[data-color]');
+      if (cb){ color=cb.dataset.color; wrap.querySelectorAll('.bcolor').forEach(b=>b.classList.toggle('active',b.dataset.color===color)); closeEditor(true); return; }
+      const wb=e.target.closest('[data-w]');
+      if (wb){ width=+wb.dataset.w; wrap.querySelectorAll('.bw').forEach(b=>b.classList.toggle('active',+b.dataset.w===width)); return; }
+      const ab=e.target.closest('[data-act]');
+      if (ab){
+        const a=ab.dataset.act;
+        if (a==='undo') undo();
+        else if (a==='redo') redo();
+        else if (a==='grid'){ gridOn=!gridOn; ab.classList.toggle('active',gridOn); draw(); }
+        else if (a==='image') picker();
+        else if (a==='png') png();
+        else if (a==='pdf') pdf();
+        else if (a==='clear'){ if (objs.length){ pushUndo(); objs=[]; sel=null; draw(); persist(); updBtns(); } }
+        else if (a==='full'){
+          if (document.fullscreenElement) document.exitFullscreen();
+          else if (wrap.requestFullscreen) wrap.requestFullscreen().catch(()=>{});
+        }
+        return;
+      }
+      const zb=e.target.closest('[data-zoom]');
+      if (zb){
+        const z=zb.dataset.zoom;
+        if (z==='zin') zoom(1.25); else if (z==='zout') zoom(1/1.25); else fit();
+        const v=wrap.querySelector('.bz-val'); if (v) v.textContent=Math.round(view.scale*100)+'%';
+      }
+    });
+    wrap.addEventListener('pointermove', ()=>{
+      const v=wrap.querySelector('.bz-val');
+      if (v && v.textContent!==Math.round(view.scale*100)+'%') v.textContent=Math.round(view.scale*100)+'%';
+    });
+  }
+
+  init();
+
+  const debug = () => ({tool, sel: !!sel, n: objs.length, undo: undoS.length, redo: redoS.length, view: {...view}});
+  try{ window.__boardDebug = debug; }catch(_e){}
+  return { html: toolbarHtml, mount, unmount, debug };
+})();
+
+ROUTES.board = function(){
+  return head(t('board_title'), t('board_hint')) + `
+  <div class="board-shell">
+    <div id="board-wrap">
+      <canvas id="board-cv"></canvas>
+      ${Board.html()}
+    </div>
+    <p class="muted small board-tip">${ic('pen')} V/P/E/L/A/R/O/T/N — инструменты · Ctrl+Z / Ctrl+Y — отмена · Delete — удалить выбранное · колесо — двигать · Ctrl+колесо — зум · двойной клик — править текст</p>
+  </div>`;
+};
+ROUTES.board.after = function(){ Board.mount(); };
+
 applyChrome();
 go('grades');
 })();
