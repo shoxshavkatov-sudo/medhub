@@ -351,3 +351,17 @@ dialog::backdrop{animation:fadeBk .25s ease}
   .board-acts{bottom:62px}
   #board-wrap{height:62vh}
 }
+
+/* ---------- окно регистрации ---------- */
+.auth-dlg{max-width:470px}
+.auth-roles{display:flex;flex-direction:column;gap:10px;margin:14px 0}
+.auth-role{display:flex;gap:13px;align-items:center;padding:14px 16px;border-radius:14px;border:1px solid var(--line);
+  background:var(--panel2);cursor:pointer;transition:transform .12s,border-color .15s,box-shadow .15s;text-align:left;color:var(--text);width:100%}
+.auth-role:hover{transform:translateY(-2px);border-color:var(--accent);box-shadow:var(--shadow)}
+.auth-role svg{width:27px;height:27px;color:var(--accent);flex:none}
+.auth-role b{display:block;font-size:1rem}
+.auth-role .muted{font-size:.8rem;display:block}
+.auth-code{font-size:2.1rem;letter-spacing:.35em;font-weight:800;text-align:center;padding:14px 10px 14px calc(10px + .35em);
+  background:var(--panel2);border:1.5px dashed var(--accent);border-radius:14px;margin:12px 0;
+  font-family:ui-monospace,'SF Mono',Menlo,monospace;color:var(--accent)}
+.auth-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}

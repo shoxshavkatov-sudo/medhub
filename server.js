@@ -64,7 +64,9 @@ app.post('/api/groups/:code/join', (req, res) => {
     g.members.push(me);
     persist();
   }
-  res.json({ group: publicGroup(g), me });
+  const out = { group: publicGroup(g), me };
+  if (me.role === 'admin') out.adminKey = g.adminKey;
+  res.json(out);
 });
 
 app.get('/api/groups/:code', (req, res) => {

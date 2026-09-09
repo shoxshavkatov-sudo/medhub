@@ -15,7 +15,7 @@ const DEFAULTS = {lang:'ru', theme:'light', quality:'high', latin:false,
   grades:[], events:[], diary:[], skills:{}, ops:[], reflect:[], duties:[],
   decks:[], cards:[], srs:{}, streak:0, lastReview:'',
   patient:{solved:0, attempted:0}, notif:{duty:true, colloq:true, cards:true},
-  group:null, syncKey:'', basesOffline:false};
+  group:null, authSkip:false, syncKey:'', basesOffline:false};
 let S;
 try { S = Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem('medhub')||'{}')); }
 catch { S = Object.assign({}, DEFAULTS); }
@@ -24,6 +24,10 @@ window.LANG = S.lang;
 
 /* ---------------- свои SVG-иконки (вместо эмодзи) ---------------- */
 const ICONS = {
+ check:'<path d="m4.5 12.5 5 5 10-11"/>',
+ upload:'<path d="M12 16V4.5M12 4.5 7.5 9M12 4.5l4.5 4.5"/><path d="M4.5 15.5v3a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-3"/>',
+ copy:'<rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M5.5 15.5h-1a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1"/>',
+ send:'<path d="M21 3.5 3.5 10.8l6.8 2.4L12.7 20 21 3.5Z"/><path d="m10.3 13.2 4.2-4.2"/>',
  move:'<path d="M12 3.5v17M3.5 12h17M12 3.5 9.5 6M12 3.5 14.5 6M12 20.5 9.5 18M12 20.5l2.5-2.5M3.5 12 6 9.5M3.5 12 6 14.5M20.5 12 18 9.5M20.5 12l-2.5 2.5"/>',
  board:'<path d="M3.5 5h17v11.5h-17Z"/><path d="M12 16.5v3M8 20.5h8"/><path d="m6.5 11.5 3-3.5 2.5 3 2-2.5 3.5 4"/>',
  undo:'<path d="M9.5 7 4 12l5.5 5M4 12h9a6 6 0 0 1 6 6v1"/>',
@@ -128,7 +132,9 @@ const Store = (function(){
       if (!body.name) return Promise.reject(new Error('name required'));
       let me = g.members.find(x=>x.name===body.name);
       if (!me){ me = {id:uid2(), name:body.name.slice(0,40), role: body.adminKey===g.adminKey?'admin':'student'}; g.members.push(me); saveL(db); }
-      return Promise.resolve({group:pub(g), me});
+      const out = {group:pub(g), me};
+      if (me.role==='admin') out.adminKey = g.adminKey;
+      return Promise.resolve(out);
     }
     if ((m = path.match(/^\/groups\/([A-Za-z0-9]+)$/)) && !o.method){
       const g = db.groups[m[1]]; if (!g) return Promise.reject(new Error('group not found'));
@@ -189,6 +195,9 @@ const Store = (function(){
         if (j.error === 'group not found' && typeof S !== 'undefined' && S.group){
           S.group = null; save(); applyChrome();
           throw new Error('Группа больше не существует на сервере — создайте новую или войдите по коду');
+        }
+        if (j.error === 'group not found'){
+          throw new Error('Группа с таким кодом не найдена — проверьте код');
         }
         if (typeof j.error === 'string' && j.error.includes('not found'))
           throw new Error('Запись не найдена — возможно, её уже удалили. Обновите страницу');
@@ -433,9 +442,9 @@ ROUTES.grades = function(){
     <table><thead><tr><th>${t('subject')}</th><th>${t('course')}</th><th>${t('grade')}</th><th>${t('credits')}</th><th>${t('date')}</th><th></th></tr></thead>
     <tbody>${S.grades.slice().sort((a,b)=>b.date<a.date?-1:1).map(g=>`
       <tr><td>${esc(g.subject)}</td><td>${t('course'+g.course)}</td><td><b>${g.grade}</b></td><td>${g.cred||'—'}</td><td>${g.date}</td>
-      <td><button class="btn small danger" data-del="${g.id}">✕</button></td></tr>`).join('') ||
+      <td><button class="btn small danger" data-del="${g.id}">${ic('trash')}</button></td></tr>`).join('') ||
       `<tr><td colspan="6" class="muted">${t('empty')}</td></tr>`}</tbody></table></div>
-    <p><button class="btn secondary small" id="g-pdf">⬇ PDF</button></p>
+    <p><button class="btn secondary small" id="g-pdf">${ic('download')} PDF</button></p>
   </div>`;
 };
 ROUTES.grades.after = function(){
@@ -487,7 +496,7 @@ ROUTES.calendar = function(){
     .map(e=>`<div class="entry tight"><div class="meta"><span class="badge ${e.type==='exam'?'bad':e.type==='colloq'||e.type==='test'?'warn':'ok'}">${t('ev_'+e.type)}</span>
       <b>${e.date}</b> ${e.time?esc(e.time):''} · ${daysBetween(todayISO(),e.date)} ${t('days_left')}</div>
       <div><b>${esc(e.title||t('ev_'+e.type))}</b>${e.subject?` · ${esc(e.subject)}`:''}
-      <button class="btn small danger" style="float:right" data-evdel="${e.id}">✕</button></div></div>`).join('') ||
+      <button class="btn small danger" style="float:right" data-evdel="${e.id}">${ic('trash')}</button></div></div>`).join('') ||
     `<div class="empty">${t('ev_none')}</div>`;
   return head(t('nav_calendar'), t('cal_hint')) + `
   <div class="card">
@@ -496,7 +505,7 @@ ROUTES.calendar = function(){
       <b style="flex:1;text-align:center;font-size:1.05rem">${calMonth.toLocaleDateString(undefined,{month:'long',year:'numeric'})}</b>
       <button class="btn secondary small" id="cal-next">→</button>
       <button class="btn small" id="cal-add">＋ ${t('add_event')}</button>
-      <button class="btn small secondary" id="cal-pdf">⬇ PDF</button>
+      <button class="btn small secondary" id="cal-pdf">${ic('download')} PDF</button>
     </div>
     <div class="cal">${cells}</div>
   </div>
@@ -605,7 +614,7 @@ ROUTES.materials = function(){
     <label class="f">${t('link')}</label><input type="url" id="m-link" placeholder="https://…">
     <label class="f">${t('body')}</label><textarea id="m-body" placeholder="${t('file_note')}"></textarea>
     ${visSelect()}
-    <p><button class="btn" id="m-post">⬆ ${t('feed_post')}</button></p>
+    <p><button class="btn" id="m-post">${ic('send')} ${t('feed_post')}</button></p>
   </div>
   <div id="mat-feed"><div class="empty">${t('loading')}</div></div>`;
 };
@@ -643,7 +652,7 @@ ROUTES.errors = function(){
     </div>
     <label class="f">${t('lesson')}</label><textarea id="e-lesson"></textarea>
     <label class="f">${t('subject')}</label><select id="e-sub"><option value="">—</option>${window.SUBJECTS.map(s=>`<option>${esc(s.n)}</option>`).join('')}</select>
-    <p><button class="btn" id="e-post">⬆ ${t('feed_post')}</button></p>
+    <p><button class="btn" id="e-post">${ic('send')} ${t('feed_post')}</button></p>
   </div>
   <div id="err-feed"><div class="empty">${t('loading')}</div></div>`;
 };
@@ -830,7 +839,7 @@ ROUTES.labs = function(){
   </div>
   <div class="card"><input type="search" id="lab-q" placeholder="${t('search')}…"></div>
   <div class="card"><div id="lab-list" class="table-wrap"></div>
-    <p><button class="btn secondary small" id="lab-pdf">⬇ PDF</button></p></div>`;
+    <p><button class="btn secondary small" id="lab-pdf">${ic('download')} PDF</button></p></div>`;
 };
 ROUTES.labs.after = function(){
   let panel = 'hem';
@@ -895,8 +904,8 @@ let painMode = 'male';
 ROUTES.pain = function(){
   return head(t('nav_pain'), t('pain_hint')) + `
   <div class="chiprow" id="pain-mode">
-    <button class="chip ${painMode==='male'?'on':''}" data-m="male">♂ ${t('mode_male')}</button>
-    <button class="chip ${painMode==='female'?'on':''}" data-m="female">♀ ${t('mode_female')}</button>
+    <button class="chip ${painMode==='male'?'on':''}" data-m="male">${t('mode_male')}</button>
+    <button class="chip ${painMode==='female'?'on':''}" data-m="female">${t('mode_female')}</button>
     <button class="chip ${painMode==='child'?'on':''}" data-m="child">${ic('child')} ${t('mode_child')}</button>
   </div>
   <div class="sim-layout">
@@ -1097,7 +1106,7 @@ ROUTES.patient.after = function(){
     const vt = c.vitals;
     $('#pt-case').innerHTML = `
     <div class="entry">
-      <div class="meta"><span class="badge">${t('pat_age')}: ${c.age}</span><span class="badge">${c.sex==='М'?'♂':'♀'} ${c.sex}</span></div>
+      <div class="meta"><span class="badge">${t('pat_age')}: ${c.age}</span><span class="badge">${c.sex}</span></div>
       <p><b>${t('pat_cc')}:</b> ${esc(c.cc)}</p>
       <p><b>${t('pat_hist')}:</b> ${esc(c.hist)}</p>
       <p><b>${t('pat_exam')}:</b> ${esc(c.exam)}</p>
@@ -1210,7 +1219,7 @@ ROUTES.tests.after = function(){
         <b>${esc(q.q)}</b><div class="comment">${ic('check')} ${t('test_correct_answer')}: ${esc(q.o[q.a])}</div>
         <div class="comment">${esc(q.e)}</div></div>`).join('')}`:''}
       <p><button class="btn" id="t-again">${ic('refresh')} ${t('test_again')}</button>
-      <button class="btn secondary" id="t-pdf">⬇ PDF</button></p></div>`;
+      <button class="btn secondary" id="t-pdf">${ic('download')} PDF</button></p></div>`;
     $('#t-again').onclick = ()=>go('tests');
     $('#t-pdf').onclick = ()=>PDFX.download('medhub-test.pdf', t('test_score'), [
       {kv:[t('test_score'), `${st.score} / ${st.qs.length} (${pct}%)`]},
@@ -1320,7 +1329,7 @@ ROUTES.curation = function(){
         <button class="btn small danger" data-cdel="${d.id}">${ic('trash')}</button></div>
     </div>`).join('') || `<div class="empty">${t('empty')}</div>`}
     ${S.diary.length?`<p><button class="btn secondary small" id="cur-print">${ic('printer')} ${t('print')}</button>
-    <button class="btn secondary small" id="cur-pdf">⬇ PDF</button></p>`:''}
+    <button class="btn secondary small" id="cur-pdf">${ic('download')} PDF</button></p>`:''}
   </div>`;
 };
 ROUTES.curation.after = function(){
@@ -1380,10 +1389,10 @@ ROUTES.skills = function(){
   <div class="grid g2">
     <div class="stat"><div class="num">${done}/${window.SKILLS.length}</div><div class="lbl">${t('skills_mine')}</div>
       <div class="progressbar" style="margin-top:8px"><div style="width:${pct}%"></div></div></div>
-    <div class="stat"><div class="num">${done}/${window.SKILLS.length}</div><div class="lbl">⬇ PDF</div>
-      <p><button class="btn small secondary" id="sk-pdf">⬇ PDF</button></p></div>
+    <div class="stat"><div class="num">${done}/${window.SKILLS.length}</div><div class="lbl">PDF</div>
+      <p><button class="btn small secondary" id="sk-pdf">${ic('download')} PDF</button></p></div>
     <div class="stat"><div class="num">${S.group?S.group.name:'—'}</div><div class="lbl">${t('skills_progress')}</div>
-      ${S.group?`<p><button class="btn small secondary" id="sk-share">⬆ ${t('feed_post')}</button></p>`:`<p class="muted" style="font-size:.8rem">${t('set_group_join')}</p>`}</div>
+      ${S.group?`<p><button class="btn small secondary" id="sk-share">${ic('send')} ${t('feed_post')}</button></p>`:`<p class="muted" style="font-size:.8rem">${t('set_group_join')}</p>`}</div>
   </div>
   ${groups.map(g=>`<div class="card"><h3>${esc(g)}</h3>
     ${window.SKILLS.filter(s=>s.g===g).map(s=>{ const v = S.skills[s.n]||0;
@@ -1437,7 +1446,7 @@ ROUTES.ops = function(){
     <label class="f">${t('notes')}</label><textarea id="o-notes"></textarea>
     ${visSelect('private')}
     <p><button class="btn" id="o-add">＋ ${t('add')}</button>
-    <button class="btn secondary" id="ops-pdf">⬇ PDF</button></p>
+    <button class="btn secondary" id="ops-pdf">${ic('download')} PDF</button></p>
   </div>
   <div class="card">${S.ops.slice().reverse().map(o=>`<div class="entry">
     <div class="meta"><span class="badge ${o.role==='assistant'?'ok':''}">${o.role==='assistant'?t('ops_assistant'):t('ops_observer')}</span> <b>${o.date}</b></div>
@@ -1464,7 +1473,7 @@ ROUTES.cases = function(){
   <div class="card"><h3>${t('case_new')}</h3>
     <label class="f">${t('title')}</label><input type="text" id="cs-title" placeholder="Кейс: боль в животе у подростка">
     <label class="f">${t('body')}</label><textarea id="cs-body" style="min-height:110px"></textarea>
-    <p><button class="btn" id="cs-post">⬆ ${t('feed_post')}</button></p>
+    <p><button class="btn" id="cs-post">${ic('send')} ${t('feed_post')}</button></p>
   </div>
   <div id="cs-feed"><div class="empty">${t('loading')}</div></div>`;
 };
@@ -1518,7 +1527,7 @@ ROUTES.reflect = function(){
     <label class="f">${t('refl_topics')} (через запятую)</label><input type="text" id="r-topics">
     <p><button class="btn" id="r-add">${ic('save')} ${t('save')}</button></p>
   </div>
-  <div class="card"><p><button class="btn secondary small" id="refl-pdf">⬇ PDF</button></p>
+  <div class="card"><p><button class="btn secondary small" id="refl-pdf">${ic('download')} PDF</button></p>
   ${S.reflect.slice().reverse().map(r=>`<div class="entry">
     <div class="meta">${ic('lock')} <b>${r.date}</b></div>
     <p><b>${t('refl_sit')}:</b> ${esc(r.sit)}</p>
@@ -1568,7 +1577,7 @@ ROUTES.duty = function(){
       <div><label class="f">${t('duty_to')}</label><input type="time" id="d-to" value="08:00"></div>
     </div>
     <p><button class="btn" id="d-add">＋ ${t('add')}</button>
-    <button class="btn secondary" id="duty-pdf">⬇ PDF</button></p>
+    <button class="btn secondary" id="duty-pdf">${ic('download')} PDF</button></p>
   </div>
   <div class="card"><h3>${t('nav_duty')}</h3>
     ${up.map(d=>`<div class="entry"><div class="meta">${ic('bed')} <b>${d.date}</b> · ${d.from}–${d.to} · ${esc(d.place||'—')} · ${d.hours} ${t('duty_hours').toLowerCase()}</div>
@@ -1634,9 +1643,9 @@ ROUTES.setgroup = function(){
   return head(t('nav_lang')) + `
   <div class="card"><h3>${ic('globe')} ${t('set_lang')}</h3>
     <div class="chiprow">
-      <button class="chip ${S.lang==='ru'?'on':''}" data-l="ru">🇷🇺 Русский</button>
-      <button class="chip ${S.lang==='uz'?'on':''}" data-l="uz">🇺🇿 Oʻzbekcha</button>
-      <button class="chip ${S.lang==='en'?'on':''}" data-l="en">🇬🇧 English</button>
+      <button class="chip ${S.lang==='ru'?'on':''}" data-l="ru">Русский</button>
+      <button class="chip ${S.lang==='uz'?'on':''}" data-l="uz">Oʻzbekcha</button>
+      <button class="chip ${S.lang==='en'?'on':''}" data-l="en">English</button>
     </div>
     <p class="muted" style="font-size:.8rem">${t('disclaimer')}</p>
   </div>
@@ -1645,46 +1654,33 @@ ROUTES.setgroup = function(){
     ${g?`<div class="entry">
       <div class="meta"><span class="badge ok">${g.code}</span> <b>${esc(g.name)}</b></div>
       <p>${t('role')}: <b>${g.me.role==='admin'?t('role_admin'):t('role_student')}</b> · ${esc(g.me.name)}</p>
-      ${g.adminKey?`<p class="muted" style="font-size:.8rem">${t('admin_key_note')} <code>${g.adminKey}</code></p>`:''}
+      <div class="auth-actions">
+        <button class="btn small secondary" id="grp-cp">${ic('copy')} ${t('auth_copy')}</button>
+        <button class="btn small secondary" id="grp-cl">${ic('link')} ${t('auth_copy_link')}</button>
+      </div>
+      ${g.me.role==='admin'&&g.adminKey?`<p class="muted" style="font-size:.8rem">${t('auth_admin_key')}: <code>${g.adminKey}</code></p>`:''}
       <p><button class="btn danger small" id="grp-leave">${t('leave_group')}</button></p>
     </div>`:`
+    <p class="muted" style="font-size:.88rem">${t('auth_choose')}</p>
     <div class="formrow g2">
-      <div><h3 style="font-size:.95rem">${t('set_group_create')}</h3>
-        <label class="f">${t('group_name')}</label><input type="text" id="grp-name" placeholder="Терапия 4 курс, группа 12">
-        <label class="f">${t('your_name')}</label><input type="text" id="grp-me">
-        <p><button class="btn" id="grp-create">${t('set_group_create')}</button></p>
-      </div>
-      <div><h3 style="font-size:.95rem">${t('set_group_join')}</h3>
-        <label class="f">${t('group_code')}</label><input type="text" id="grp-code" placeholder="A1B2C3" style="text-transform:uppercase">
-        <label class="f">${t('your_name')}</label><input type="text" id="grp-joinme">
-        <p><button class="btn secondary" id="grp-join">${t('set_group_join')}</button></p>
-      </div>
+      <p><button class="btn" id="grp-open-create">${ic('crown')} ${t('auth_teacher')}</button></p>
+      <p><button class="btn secondary" id="grp-open-join">${ic('users')} ${t('auth_student')}</button></p>
     </div>`}
     <div id="grp-members"></div>
   </div>`;
 };
 ROUTES.setgroup.after = function(){
   $$('[data-l]').forEach(b=>b.onclick=()=>{ S.lang=b.dataset.l; save(); applyChrome(); go('setgroup'); toast(t('saved')); });
-  const cr = $('#grp-create');
-  if (cr) cr.onclick = async ()=>{
-    const name=$('#grp-name').value.trim(), me=$('#grp-me').value.trim();
-    if (!name||!me) return toast(t('required'));
-    try { const j = await api('/groups',{method:'POST',body:{name, adminName:me}});
-      S.group = {code:j.group.code, name:j.group.name, me:j.me, adminKey:j.adminKey}; save();
-      applyChrome(); toast(t('group_saved')); go('setgroup'); }
-    catch(e){ toast(e.message); }
-  };
-  const jn = $('#grp-join');
-  if (jn) jn.onclick = async ()=>{
-    const code=$('#grp-code').value.trim().toUpperCase(), me=$('#grp-joinme').value.trim();
-    if (!code||!me) return toast(t('required'));
-    try { const j = await api(`/groups/${code}/join`,{method:'POST',body:{name:me}});
-      S.group = {code:j.group.code, name:j.group.name, me:j.me}; save();
-      applyChrome(); toast(t('group_saved')); go('setgroup'); }
-    catch(e){ toast(e.message); }
-  };
+  const oc = $('#grp-open-create');
+  if (oc) oc.onclick = ()=> Auth.show('create');
+  const oj = $('#grp-open-join');
+  if (oj) oj.onclick = ()=> Auth.show('join');
+  const cp = $('#grp-cp');
+  if (cp) cp.onclick = ()=> Auth.copyText(S.group.code);
+  const cl = $('#grp-cl');
+  if (cl) cl.onclick = ()=> Auth.copyText(Auth.inviteLink(S.group.code));
   const lv = $('#grp-leave');
-  if (lv) lv.onclick = ()=>{ S.group=null; save(); applyChrome(); go('setgroup'); };
+  if (lv) lv.onclick = ()=>{ S.group=null; S.authSkip=false; save(); applyChrome(); go('setgroup'); };
   Store.ready.then(()=>{
     if (Store.isStatic()){
       const box = $('#static-note');
@@ -1715,7 +1711,7 @@ ROUTES.setlook = function(){
     </div>
   </div>
   <div class="card"><h3>${ic('book')} ${t('set_latin')}</h3>
-    <p><button class="chip ${S.latin?'on':''}" id="latin-toggle">${S.latin?'✓ ':''}${t('latin_on')}</button></p>
+    <p><button class="chip ${S.latin?'on':''}" id="latin-toggle">${S.latin?ic('check')+' ':''}${t('latin_on')}</button></p>
   </div>`;
 };
 ROUTES.setlook.after = function(){
@@ -1729,21 +1725,21 @@ ROUTES.setdata = function(){
   return head(t('nav_data')) + `
   <div class="card"><h3>${ic('download')} ${t('set_offline')}</h3>
     <p class="muted" style="font-size:.85rem">МКБ, препараты, нормы, протоколы, калькуляторы, тесты и кейсы уже встроены в приложение и работают без интернета. Нажмите, чтобы закрепить кэш.</p>
-    <p><button class="btn" id="off-dl">${S.basesOffline?'✓ ':'⬇ '}${t('offline_dl')}</button></p>
+    <p><button class="btn" id="off-dl">${S.basesOffline?ic('check')+' ':ic('download')+' '}${t('offline_dl')}</button></p>
   </div>
   <div class="card"><h3>${ic('save')} ${t('backup')}</h3>
-    <p><button class="btn secondary" id="bk-export">⬇ ${t('backup_export')}</button>
-    <label class="btn secondary" style="cursor:pointer">⬆ ${t('backup_import')}<input type="file" id="bk-import" accept=".json" hidden></label></p>
+    <p><button class="btn secondary" id="bk-export">${ic('download')} ${t('backup_export')}</button>
+    <label class="btn secondary" style="cursor:pointer">${ic('upload')} ${t('backup_import')}<input type="file" id="bk-import" accept=".json" hidden></label></p>
     <label class="f">${t('sync_key')}</label>
     <div style="display:flex;gap:8px"><input type="text" id="bk-key" value="${esc(S.syncKey)}" placeholder="мой-ключ-2026">
-    <button class="btn small" id="bk-up">${ic('save')} ↑</button><button class="btn small secondary" id="bk-down">${ic('download')} ↓</button></div>
+    <button class="btn small" id="bk-up">${ic('upload')}</button><button class="btn small secondary" id="bk-down">${ic('download')}</button></div>
     <p class="muted" style="font-size:.8rem">Синхронизация по ключу: тот же ключ на другом устройстве подтянет данные.</p>
   </div>
   <div class="card"><h3>${ic('doc')} ${t('export_pdf')}</h3>
     <p><button class="btn secondary" id="ex-diary-print">${ic('printer')} ${t('nav_diary')} → ${t('print')}</button>
-    <button class="btn secondary" id="ex-diary-pdf">⬇ ${t('nav_diary')} → PDF</button>
-    <button class="btn secondary" id="ex-grades-pdf">⬇ ${t('nav_grades')} → PDF</button>
-    <button class="btn secondary" id="ex-duty-pdf">⬇ ${t('nav_duty')} → PDF</button></p>
+    <button class="btn secondary" id="ex-diary-pdf">${ic('download')} ${t('nav_diary')} → PDF</button>
+    <button class="btn secondary" id="ex-grades-pdf">${ic('download')} ${t('nav_grades')} → PDF</button>
+    <button class="btn secondary" id="ex-duty-pdf">${ic('download')} ${t('nav_duty')} → PDF</button></p>
   </div>`;
 };
 ROUTES.setdata.after = function(){
@@ -2432,6 +2428,129 @@ ROUTES.board = function(){
 };
 ROUTES.board.after = function(){ Board.mount(); };
 
+
+/* ---------------- Регистрация: учитель создаёт группу, ученики входят по коду ---------------- */
+const Auth = (function(){
+  const inviteLink = code => location.origin + location.pathname + '?join=' + code;
+  function copyText(txt, msg){
+    const ok = ()=> toast(msg || t('auth_copied'));
+    const fallback = ()=>{ const i=document.createElement('input'); i.value=txt; document.body.appendChild(i); i.select();
+      try{ document.execCommand('copy'); ok(); }catch(_e){} i.remove(); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(ok).catch(fallback);
+    else fallback();
+  }
+  function leave(){ /* после выхода/входа перерисуем активный раздел */
+    go(currentRoute);
+  }
+  function show(mode, prefill){
+    const prev = document.querySelector('dialog[open].auth-dlg');
+    if (prev) prev.close();
+    const d = dlg('<div id="auth-box"></div>');
+    d.classList.add('auth-dlg');
+    const box = d.querySelector('#auth-box');
+    const view = mode || 'choose';
+
+    if (view === 'choose'){
+      box.innerHTML = `
+        <h3 style="margin-top:0">${ic('grad')} ${t('auth_welcome')}</h3>
+        <p class="muted" style="font-size:.88rem">${t('auth_choose')}</p>
+        <div class="auth-roles">
+          <button class="auth-role" data-mode="create">${ic('crown')}<span><b>${t('auth_teacher')}</b><span class="muted">${t('auth_teacher_sub')}</span></span></button>
+          <button class="auth-role" data-mode="join">${ic('users')}<span><b>${t('auth_student')}</b><span class="muted">${t('auth_student_sub')}</span></span></button>
+        </div>
+        <p class="muted" style="text-align:center;margin-bottom:0"><a href="#" id="auth-skip">${t('auth_skip')}</a></p>`;
+      box.querySelector('[data-mode=create]').onclick = ()=>show('create');
+      box.querySelector('[data-mode=join]').onclick = ()=>show('join');
+      box.querySelector('#auth-skip').onclick = e=>{ e.preventDefault(); S.authSkip=true; save(); d.close(); };
+      return;
+    }
+
+    if (view === 'create'){
+      box.innerHTML = `
+        <h3 style="margin-top:0">${ic('crown')} ${t('auth_create_title')}</h3>
+        <label class="f">${t('group_name')}</label><input type="text" id="au-name" placeholder="Лечебный 4 курс, группа 12">
+        <label class="f">${t('your_name')}</label><input type="text" id="au-me" placeholder="${t('auth_ph_teacher')}">
+        <div class="auth-actions"><button class="btn" id="au-go">${t('set_group_create')}</button>
+        <button class="btn secondary" id="au-back">${t('auth_back')}</button></div>`;
+      box.querySelector('#au-back').onclick = ()=>show('choose');
+      const go1 = async ()=>{
+        const name = box.querySelector('#au-name').value.trim(), me = box.querySelector('#au-me').value.trim();
+        if (!name || !me) return toast(t('required'));
+        try{
+          const j = await api('/groups', {method:'POST', body:{name, adminName:me}});
+          S.group = {code:j.group.code, name:j.group.name, me:j.me, adminKey:j.adminKey};
+          S.authSkip = true; save();
+          show('success');
+        }catch(e){ toast(e.message); }
+      };
+      box.querySelector('#au-go').onclick = go1;
+      box.querySelector('#au-name').addEventListener('keydown', e=>{ if (e.key==='Enter') go1(); });
+      setTimeout(()=>{ try{ box.querySelector('#au-name').focus(); }catch(_e){} }, 80);
+      return;
+    }
+
+    if (view === 'join'){
+      box.innerHTML = `
+        <h3 style="margin-top:0">${ic('users')} ${t('auth_join_title')}</h3>
+        <label class="f">${t('group_code')}</label><input type="text" id="au-code" value="${esc(prefill||'')}" placeholder="A1B2C3" style="text-transform:uppercase" autocomplete="off">
+        <label class="f">${t('your_name')}</label><input type="text" id="au-me">
+        <details style="margin-top:8px"><summary class="muted" style="font-size:.8rem;cursor:pointer">${t('auth_have_key')}</summary>
+          <input type="text" id="au-key" placeholder="admin key" style="margin-top:6px"></details>
+        <div class="auth-actions"><button class="btn" id="au-go">${t('set_group_join')}</button>
+        <button class="btn secondary" id="au-back">${t('auth_back')}</button></div>`;
+      box.querySelector('#au-back').onclick = ()=>show('choose');
+      const go1 = async ()=>{
+        const code = box.querySelector('#au-code').value.trim().toUpperCase();
+        const me = box.querySelector('#au-me').value.trim();
+        const keyEl = box.querySelector('#au-key');
+        const key = keyEl ? keyEl.value.trim() : '';
+        if (!code || !me) return toast(t('required'));
+        try{
+          const j = await api('/groups/'+code+'/join', {method:'POST', body:{name:me, adminKey:key || undefined}});
+          S.group = {code:j.group.code, name:j.group.name, me:j.me};
+          if (j.adminKey) S.group.adminKey = j.adminKey;
+          S.authSkip = true; save();
+          d.close();
+          toast(t('group_saved'));
+          leave();
+        }catch(e){ toast(e.message); }
+      };
+      box.querySelector('#au-go').onclick = go1;
+      box.querySelector('#au-code').addEventListener('keydown', e=>{ if (e.key==='Enter') box.querySelector('#au-me').focus(); });
+      box.querySelector('#au-me').addEventListener('keydown', e=>{ if (e.key==='Enter') go1(); });
+      setTimeout(()=>{ try{ (prefill ? box.querySelector('#au-me') : box.querySelector('#au-code')).focus(); }catch(_e){} }, 80);
+      return;
+    }
+
+    if (view === 'success'){
+      const g = S.group;
+      box.innerHTML = `
+        <h3 style="margin-top:0">${ic('crown')} ${t('auth_done_title')}</h3>
+        <p class="muted" style="font-size:.88rem">${t('auth_done_sub')}</p>
+        <div class="auth-code">${esc(g.code)}</div>
+        <div class="auth-actions">
+          <button class="btn small secondary" id="au-cp">${ic('copy')} ${t('auth_copy')}</button>
+          <button class="btn small secondary" id="au-cl">${ic('link')} ${t('auth_copy_link')}</button>
+        </div>
+        <details style="margin-top:10px"><summary class="muted" style="font-size:.8rem;cursor:pointer">${t('auth_admin_key')}</summary>
+          <code style="word-break:break-all">${esc(g.adminKey||'')}</code></details>
+        <div class="auth-actions"><button class="btn" id="au-open">${t('auth_open_app')}</button></div>`;
+      box.querySelector('#au-cp').onclick = ()=>copyText(g.code);
+      box.querySelector('#au-cl').onclick = ()=>copyText(inviteLink(g.code));
+      box.querySelector('#au-open').onclick = ()=>{ d.close(); leave(); };
+      return;
+    }
+  }
+  function maybeShow(){
+    let jc = '';
+    try{ jc = (new URLSearchParams(location.search).get('join')||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,8); }catch(_e){}
+    if (jc){ try{ history.replaceState(null,'',location.pathname); }catch(_e){} show('join', jc); return; }
+    if (!S.group && !S.authSkip) show();
+  }
+  return { show, maybeShow, copyText, inviteLink };
+})();
+
 applyChrome();
 go('grades');
+setTimeout(()=>{ try{ Auth.maybeShow(); }catch(_e){} }, 700);
 })();
