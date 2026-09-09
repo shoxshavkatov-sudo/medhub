@@ -31,6 +31,25 @@
     <footer class="muted small-print"></footer>
   </div>
 </div>
+
+<div id="ai-panel" class="hidden">
+  <div class="ai-p-head">
+    <div class="ai-bot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="8" width="15" height="11.5" rx="3.5"/><path d="M12 8V4.5M9 4.5h6"/><circle cx="9.3" cy="13.2" r="1.2"/><circle cx="14.7" cy="13.2" r="1.2"/><path d="M9.5 16.8h5"/></svg></div>
+    <div style="flex:1;min-width:0"><b>ИИ-ассистент</b><div class="muted" id="ai-sub" style="font-size:.75rem"></div></div>
+    <button id="ai-close" class="icon-btn" aria-label="Закрыть">✕</button>
+  </div>
+  <div id="ai-log" class="ai-log"></div>
+  <div class="chiprow" id="ai-sug"></div>
+  <div class="ai-p-input">
+    <input type="text" id="ai-q" autocomplete="off">
+    <button class="btn" id="ai-send" aria-label="Отправить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px"><path d="M21 3.5 3.5 10.8l6.8 2.4L12.7 20 21 3.5Z"/><path d="m10.3 13.2 4.2-4.2"/></svg></button>
+  </div>
+  <div id="ai-keyline" class="hidden">
+    <input type="password" id="ai-keyin" placeholder="gsk_…" autocomplete="off">
+    <button class="btn small" id="ai-keysave">OK</button>
+  </div>
+  <p class="muted" id="ai-foot" style="font-size:.72rem;margin:6px 0 0"></p>
+</div>
 <nav id="dock" aria-label="Разделы"></nav>
 <div id="dock-sheet" class="hidden"></div>
 <div id="toast" class="hidden"></div>
@@ -40,6 +59,7 @@
 <script src="js/data.js"></script>
 <script src="js/data2.js"></script>
 <script src="js/sims.js"></script>
+<script src="js/ai_config.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

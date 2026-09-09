@@ -241,7 +241,7 @@ function applyChrome(){
   window.LANG = S.lang;
   $('#lang-select').value = S.lang;
   $('#global-search').placeholder = t('search_placeholder');
-  const ab = $('#ai-btn'); if (ab) ab.onclick = ()=>go('ai');
+  const ab = $('#ai-btn'); if (ab) ab.onclick = ()=>AI.toggle();
   $('.small-print').textContent = t('disclaimer');
   $('#theme-btn').innerHTML = S.theme==='light'?ic('moon'):S.theme==='dark'?ic('sun'):ic('flame');
   buildDock();
@@ -272,8 +272,6 @@ const DOCK = [
   items:[['board','nav_board']]},
  {key:'train', lbl:{ru:'Тренажёры', uz:'Mashqlar', en:'Trainers'}, icon:'train', first:'patient',
   items:[['patient','nav_patient'],['tests','nav_tests'],['cards','nav_cards']]},
- {key:'ai', lbl:{ru:'ИИ', uz:'AI', en:'AI'}, icon:'bot', first:'ai',
-  items:[['ai','nav_ai']]},
  {key:'diary', lbl:{ru:'Дневник', uz:'Kundalik', en:'Diary'}, icon:'diary', first:'curation',
   items:[['curation','nav_curation'],['skills','nav_skills'],['ops','nav_ops'],['cases','nav_cases'],['reflect','nav_reflect'],['duty','nav_duty']]},
  {key:'set', lbl:{ru:'Опции', uz:'Sozlash', en:'Options'}, icon:'set', first:'setgroup',
@@ -2618,9 +2616,11 @@ const Auth = (function(){
 })();
 
 
-/* ---------- ИИ-ассистент (Groq, только учебная медицина) ---------- */
+
+/* ---------- ИИ-ассистент: панель у поиска, общий ключ сайта ---------- */
 const AI = (function(){
   const SYSTEM = 'Ты — ИИ-ассистент MedHub для студентов-медиков. Ты отвечаешь ТОЛЬКО на вопросы, связанные с учебной медициной: анатомия, гистология, биохимия, физиология, патология, фармакология, пропедевтика, клинические дисциплины, лабораторные нормы, диагностика, неотложные состояния (в учебных целях). Если вопрос не по учебной медицине — вежливо откажись одной фразой и предложи задать медицинский вопрос. Отвечай на языке вопроса (по умолчанию русский), кратко и структурировано: списки, ключевые термины с расшифровкой. Не назначай лечение конкретному человеку — давай только учебную информацию и напоминай сверяться с первоисточниками.';
+  let proxy = false, sharedKey = null, bound = false, keyReady = false;
   const md = t => esc(t)
     .replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')
     .replace(/\*([^*\n]+)\*/g,'<i>$1</i>')
@@ -2632,10 +2632,24 @@ const AI = (function(){
       `<div class="empty">${t('ai_hello')}</div>`;
     log.scrollTop = log.scrollHeight;
   }
+  async function detectKey(){
+    if (keyReady) return true;
+    if (!Store.isStatic()){
+      try { if (await (await api('/ai/key')).shared){ proxy = true; keyReady = true; return true; } } catch(_e){}
+    }
+    if (window.MEDHUB_AI_KEY){ sharedKey = window.MEDHUB_AI_KEY; proxy = false; keyReady = true; return true; }
+    if (S.groqKey){ proxy = false; keyReady = true; return true; }
+    return false;
+  }
   async function send(q){
     q = (q||'').trim();
     if (!q) return;
-    if (!S.groqKey) return toast(t('ai_need_key'));
+    const ok = await detectKey();
+    if (!ok){
+      $('#ai-keyline').classList.remove('hidden');
+      return toast(t('ai_need_key'));
+    }
+    $('#ai-keyline').classList.add('hidden');
     S.aiChat = S.aiChat||[];
     S.aiChat.push({role:'user', content:q});
     save(); render();
@@ -2648,58 +2662,55 @@ const AI = (function(){
       log.appendChild(tip); log.scrollTop = log.scrollHeight;
     }
     try{
-      const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {method:'POST',
-        headers:{'Authorization':'Bearer '+S.groqKey, 'Content-Type':'application/json'},
-        body: JSON.stringify({model:'llama-3.3-70b-versatile', temperature:0.35, max_tokens:1200,
-          messages:[{role:'system', content:SYSTEM}].concat(S.aiChat.slice(-14))})});
-      const j = await r.json().catch(()=>({}));
-      if (!r.ok) throw new Error(r.status===401 ? t('ai_bad_key') : ((j.error&&j.error.message)||('HTTP '+r.status)));
-      const ans = (j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content) || '—';
+      let ans;
+      if (proxy){
+        const j = await api('/ai/chat', {method:'POST', body:{messages:[{role:'system', content:SYSTEM}].concat(S.aiChat.slice(-14))}});
+        ans = j.content || '—';
+      } else {
+        const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {method:'POST',
+          headers:{'Authorization':'Bearer '+(sharedKey||S.groqKey), 'Content-Type':'application/json'},
+          body: JSON.stringify({model:'llama-3.3-70b-versatile', temperature:0.35, max_tokens:1200,
+            messages:[{role:'system', content:SYSTEM}].concat(S.aiChat.slice(-14))})});
+        const j = await r.json().catch(()=>({}));
+        if (!r.ok) throw new Error(r.status===401 ? t('ai_bad_key') : ((j.error&&j.error.message)||('HTTP '+r.status)));
+        ans = (j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content) || '—';
+      }
       S.aiChat.push({role:'assistant', content:ans});
       if (S.aiChat.length>40) S.aiChat = S.aiChat.slice(-40);
       save();
     }catch(e){ toast(e.message || t('ai_err')); }
     render();
   }
-  return {render, send};
+  function mount(){
+    if (bound) return; bound = true;
+    $('#ai-sub').textContent = t('ai_med_only');
+    $('#ai-q').placeholder = t('ai_ph');
+    $('#ai-foot').innerHTML = t('ai_disclaimer') + ' · <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a>';
+    $('#ai-sug').innerHTML = ['ai_s1','ai_s2','ai_s3','ai_s4'].map(k=>`<button class="chip" data-q="${esc(t(k))}">${esc(t(k))}</button>`).join('');
+    $$('#ai-sug .chip').forEach(c=>c.onclick = ()=>{ AI.toggle(); send(c.dataset.q); });
+    $('#ai-send').onclick = ()=>send($('#ai-q').value);
+    $('#ai-q').addEventListener('keydown', e=>{ if (e.key==='Enter') send($('#ai-q').value); });
+    $('#ai-close').onclick = ()=>$('#ai-panel').classList.add('hidden');
+    $('#ai-keysave').onclick = ()=>{ const v=$('#ai-keyin').value.trim(); if(!v) return toast(t('required')); S.groqKey=v; save(); $('#ai-keyline').classList.add('hidden'); toast(t('saved')); send('Привет! Что ты умеешь?'); };
+    document.addEventListener('click', e=>{
+      const p = $('#ai-panel');
+      if (!p.classList.contains('hidden') && !e.target.closest('#ai-panel') && !e.target.closest('#ai-btn'))
+        p.classList.add('hidden');
+    });
+    detectKey().then(ok=>{ if (!ok && !$('#ai-panel').classList.contains('hidden')) $('#ai-keyline').classList.remove('hidden'); });
+  }
+  function toggle(){
+    mount();
+    const p = $('#ai-panel');
+    p.classList.toggle('hidden');
+    if (!p.classList.contains('hidden')){
+      render();
+      detectKey().then(ok=>{ $('#ai-keyline').classList.toggle('hidden', !!ok || !!S.groqKey); });
+      setTimeout(()=>{ try{ $('#ai-q').focus(); }catch(_e){} }, 90);
+    }
+  }
+  return {toggle, send, render};
 })();
-ROUTES.ai = function(){
-  const key = !!S.groqKey;
-  return head(t('nav_ai'), t('ai_hint')) + `
-  <div class="card ai-card">
-    <div class="ai-head"><div class="ai-bot">${ic('bot')}</div><div><h3 style="margin:0">${t('ai_title')}</h3>
-      <p class="muted small" style="margin:0">${t('ai_med_only')}</p></div></div>
-    ${key?`<p class="muted small" style="margin-bottom:0">${ic('check')} Groq · <a href="#" id="ai-key-reset">${t('ai_key_change')}</a></p>`:''}
-  </div>
-  <div class="card${key?' hidden':''}" id="ai-key-card">
-    <h3>${t('ai_key_title')}</h3>
-    <p class="muted small">Ключ хранится только в вашем браузере. Бесплатный ключ — <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a>.</p>
-    <div style="display:flex;gap:8px"><input type="password" id="ai-key" placeholder="gsk_…" autocomplete="off">
-    <button class="btn" id="ai-key-save">${t('ai_key_btn')}</button></div>
-  </div>
-  <div class="card${key?'':' hidden'}" id="ai-chat-card">
-    <div id="ai-log" class="ai-log"></div>
-    <div class="chiprow" id="ai-sug">
-      ${['ai_s1','ai_s2','ai_s3','ai_s4'].map(k=>`<button class="chip" data-q="${esc(t(k))}">${esc(t(k))}</button>`).join('')}
-    </div>
-    <div style="display:flex;gap:8px;margin-top:8px">
-      <input type="text" id="ai-q" placeholder="${t('ai_ph')}">
-      <button class="btn" id="ai-send">${ic('send')}</button>
-    </div>
-    <p class="muted small" style="margin-bottom:0">${t('ai_disclaimer')} <a href="#" id="ai-clear">${t('ai_clear')}</a></p>
-  </div>`;
-};
-ROUTES.ai.after = function(){
-  const k = $('#ai-key-card'), cc = $('#ai-chat-card');
-  const sync = ()=>{ const has = !!S.groqKey; k.classList.toggle('hidden',has); cc.classList.toggle('hidden',!has); AI.render(); };
-  $('#ai-key-save').onclick = ()=>{ const v=$('#ai-key').value.trim(); if(!v) return toast(t('required')); S.groqKey=v; save(); sync(); toast(t('saved')); };
-  const rs = $('#ai-key-reset'); if (rs) rs.onclick = (e)=>{ e.preventDefault(); S.groqKey=''; save(); sync(); };
-  $('#ai-send').onclick = ()=>AI.send($('#ai-q').value);
-  $('#ai-q').addEventListener('keydown', e=>{ if (e.key==='Enter') AI.send($('#ai-q').value); });
-  $$('#ai-sug .chip').forEach(c=>c.onclick = ()=>AI.send(c.dataset.q));
-  const cl = $('#ai-clear'); if (cl) cl.onclick = (e)=>{ e.preventDefault(); S.aiChat=[]; save(); AI.render(); };
-  AI.render();
-};
 
 applyChrome();
 go('grades');

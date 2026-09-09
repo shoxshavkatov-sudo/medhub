@@ -415,3 +415,22 @@ dialog::backdrop{animation:fadeBk .25s ease}
 @media (max-width:640px){
   #dock{max-width:calc(100vw - 16px);overflow-x:auto}
 }
+
+/* ---------- панель ИИ у поиска ---------- */
+#ai-panel{position:fixed;top:58px;right:14px;width:min(440px,calc(100vw - 24px));max-height:min(74vh,660px);
+  display:flex;flex-direction:column;gap:10px;padding:14px;border-radius:18px;z-index:60;
+  background:color-mix(in srgb,var(--panel) 94%,transparent);
+  -webkit-backdrop-filter:blur(26px) saturate(190%);backdrop-filter:blur(26px) saturate(190%);
+  border:1px solid var(--line);box-shadow:0 24px 60px rgba(0,0,0,.28);animation:sheetIn .26s cubic-bezier(.2,.7,.3,1)}
+.ai-p-head{display:flex;gap:10px;align-items:center}
+.ai-p-head b{font-size:.98rem}
+.ai-p-head .ai-bot{width:38px;height:38px;border-radius:12px}
+.ai-p-head .ai-bot svg{width:22px;height:22px}
+#ai-close{border:none;background:transparent;color:var(--muted);font-size:14px;cursor:pointer;padding:6px}
+#ai-close:hover{color:var(--text)}
+#ai-panel .ai-log{flex:1;min-height:220px}
+.ai-p-input{display:flex;gap:8px}
+#ai-keyline{display:flex;gap:6px;align-items:center}
+#ai-keyline input{flex:1}
+#ai-panel .chiprow .chip{font-size:.72rem;padding:5px 9px}
+@media (max-width:640px){ #ai-panel{top:54px;right:8px} }

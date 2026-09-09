@@ -88,6 +88,27 @@ app.get('/api/groups/:code/feed', (req, res) => {
   res.json({ entries: list.slice(0, 300) });
 });
 
+/* ---------- ИИ-ассистент: общий ключ Groq (скрыт от клиентов) ---------- */
+const AI_KEY = (process.env.GROQ_API_KEY
+  || (fs.existsSync(path.join(__dirname, 'ai_key.txt')) ? fs.readFileSync(path.join(__dirname, 'ai_key.txt'), 'utf8').trim() : ''));
+
+app.get('/api/ai/key', (req, res) => res.json({ shared: !!AI_KEY }));
+
+app.post('/api/ai/chat', async (req, res) => {
+  if (!AI_KEY) return res.status(501).json({ error: 'no shared key configured' });
+  try {
+    const msgs = Array.isArray(req.body && req.body.messages) ? req.body.messages.slice(-16) : [];
+    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + AI_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'llama-3.3-70b-versatile', temperature: 0.35, max_tokens: 1200, messages: msgs })
+    });
+    const j = await r.json();
+    if (!r.ok) return res.status(r.status).json({ error: (j.error && j.error.message) || 'groq error' });
+    res.json({ content: (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '' });
+  } catch (e) { res.status(502).json({ error: 'groq unreachable' }); }
+});
+
 app.get('/api/feed', (req, res) => {
   const type = req.query.type;
   let list = db.entries.slice();
