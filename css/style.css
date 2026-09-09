@@ -365,3 +365,53 @@ dialog::backdrop{animation:fadeBk .25s ease}
   background:var(--panel2);border:1.5px dashed var(--accent);border-radius:14px;margin:12px 0;
   font-family:ui-monospace,'SF Mono',Menlo,monospace;color:var(--accent)}
 .auth-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+
+/* ---------- ИИ-ассистент ---------- */
+.ai-head{display:flex;gap:13px;align-items:center}
+.ai-bot{width:48px;height:48px;border-radius:15px;display:grid;place-items:center;
+  background:linear-gradient(135deg,var(--accent),#7c3aed);color:#fff;flex:none;animation:floaty 3.4s ease-in-out infinite}
+.ai-bot svg{width:27px;height:27px}
+.ai-log{max-height:46vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:4px 2px;scroll-behavior:smooth}
+.aimsg{display:flex;gap:9px;max-width:92%;animation:fadeUp .3s cubic-bezier(.2,.7,.3,1)}
+.aimsg.user{margin-left:auto;flex-direction:row-reverse}
+.aimsg .ab{width:30px;height:30px;border-radius:10px;display:grid;place-items:center;background:var(--panel2);color:var(--accent);flex:none}
+.aimsg .ab svg{width:17px;height:17px}
+.aimsg .atxt{background:var(--panel2);border-radius:13px;padding:9px 12px;font-size:.92rem;overflow-wrap:anywhere}
+.aimsg.user .atxt{background:color-mix(in srgb,var(--accent) 15%,var(--panel))}
+.aimsg.typing .atxt{display:flex;gap:4px;align-items:center;padding:12px 14px}
+.aimsg.typing .atxt span{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:dot 1.1s infinite}
+.aimsg.typing .atxt span:nth-child(2){animation-delay:.18s}
+.aimsg.typing .atxt span:nth-child(3){animation-delay:.36s}
+@keyframes dot{0%,100%{opacity:.25;transform:translateY(0)}50%{opacity:1;transform:translateY(-3px)}}
+
+/* ---------- вкладки лент ---------- */
+.feed-tabs{display:flex;gap:6px;margin-bottom:10px}
+.ftab{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:12px;border:1px solid var(--line);
+  background:var(--panel);color:var(--text);cursor:pointer;transition:transform .18s,background .18s,color .18s,border-color .18s}
+.ftab svg{width:16px;height:16px}
+.ftab:hover{transform:translateY(-1px)}
+.ftab.on{background:linear-gradient(135deg,var(--accent),#7c3aed);color:#fff;border-color:transparent}
+
+/* ---------- большое окно регистрации ---------- */
+.auth-dlg{max-width:600px;padding:26px 30px}
+.auth-hero{text-align:center;padding:6px 0 10px}
+.auth-hero svg{width:62px;height:62px;color:var(--accent);animation:floaty 3.4s ease-in-out infinite}
+.auth-hero h3{margin:8px 0 3px;font-size:1.35rem}
+.auth-hero .muted{max-width:420px;margin:0 auto}
+
+/* ---------- живые иконки ---------- */
+.dock-btn svg{transition:transform .25s cubic-bezier(.2,.7,.3,1.35)}
+.dock-btn:hover svg{transform:translateY(-2px) scale(1.16) rotate(-4deg)}
+.dock-btn.active svg{animation:dockPulse 2.6s ease-in-out infinite}
+@keyframes dockPulse{0%,100%{transform:none}50%{transform:translateY(-2px) scale(1.1)}}
+.card h3 svg{transition:transform .3s}
+.card:hover h3 svg{transform:scale(1.18) rotate(6deg)}
+.btn svg{transition:transform .2s}
+.btn:hover svg{transform:translateY(-1px) scale(1.08)}
+@keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@media (prefers-reduced-motion: reduce){
+  .dock-btn svg,.card h3 svg,.btn svg,.ai-bot,.auth-hero svg{animation:none!important;transition:none!important}
+}
+@media (max-width:640px){
+  #dock{max-width:calc(100vw - 16px);overflow-x:auto}
+}

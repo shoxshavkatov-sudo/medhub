@@ -88,6 +88,34 @@ app.get('/api/groups/:code/feed', (req, res) => {
   res.json({ entries: list.slice(0, 300) });
 });
 
+app.get('/api/feed', (req, res) => {
+  const type = req.query.type;
+  let list = db.entries.slice();
+  if (type) list = list.filter(e => e.type === type);
+  list.sort((a, b) => b.ts - a.ts);
+  res.json({ entries: list.slice(0, 120).map(e => Object.assign({}, e, { groupName: (db.groups[e.group] || {}).name || '' })) });
+});
+
+app.get('/api/groups/:code/grades', (req, res) => {
+  const g = group(req.params.code);
+  if (!g) return res.status(404).json({ error: 'group not found' });
+  res.json({ grades: g.grades || [] });
+});
+
+app.post('/api/groups/:code/grades', (req, res) => {
+  const g = group(req.params.code);
+  if (!g) return res.status(404).json({ error: 'group not found' });
+  const b = req.body || {};
+  if (!b.subject || !b.grade) return res.status(400).json({ error: 'subject and grade required' });
+  const rec = { id: nowId(), memberId: String(b.memberId || ''), authorName: String(b.authorName || '').slice(0, 40),
+    subject: String(b.subject).slice(0, 80), course: +b.course || 1, grade: +b.grade, cred: +b.cred || null,
+    date: String(b.date || '').slice(0, 10), ts: Date.now() };
+  g.grades = g.grades || [];
+  g.grades.push(rec);
+  persist();
+  res.json({ grade: rec });
+});
+
 app.post('/api/groups/:code/entries', (req, res) => {
   const g = group(req.params.code);
   if (!g) return res.status(404).json({ error: 'group not found' });

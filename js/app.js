@@ -15,7 +15,7 @@ const DEFAULTS = {lang:'ru', theme:'light', quality:'high', latin:false,
   grades:[], events:[], diary:[], skills:{}, ops:[], reflect:[], duties:[],
   decks:[], cards:[], srs:{}, streak:0, lastReview:'',
   patient:{solved:0, attempted:0}, notif:{duty:true, colloq:true, cards:true},
-  group:null, authSkip:false, syncKey:'', basesOffline:false};
+  group:null, authSkip:false, groqKey:'', aiChat:[], syncKey:'', basesOffline:false};
 let S;
 try { S = Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem('medhub')||'{}')); }
 catch { S = Object.assign({}, DEFAULTS); }
@@ -24,6 +24,7 @@ window.LANG = S.lang;
 
 /* ---------------- свои SVG-иконки (вместо эмодзи) ---------------- */
 const ICONS = {
+ bot:'<rect x="4.5" y="8" width="15" height="11.5" rx="3.5"/><path d="M12 8V4.5M9 4.5h6"/><circle cx="9.3" cy="13.2" r="1.2"/><circle cx="14.7" cy="13.2" r="1.2"/><path d="M9.5 16.8h5"/>',
  check:'<path d="m4.5 12.5 5 5 10-11"/>',
  upload:'<path d="M12 16V4.5M12 4.5 7.5 9M12 4.5l4.5 4.5"/><path d="M4.5 15.5v3a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-3"/>',
  copy:'<rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M5.5 15.5h-1a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1"/>',
@@ -142,7 +143,8 @@ const Store = (function(){
     }
     if ((m = path.match(/^\/groups\/([A-Za-z0-9]+)\/feed$/))){
       let list = db.entries.filter(e=>e.group===m[1]);
-      if (o.type) list = list.filter(e=>e.type===o.type);
+      const qt = (o.query&&o.query.type) || o.type;
+      if (qt) list = list.filter(e=>e.type===qt);
       list.sort((a,b)=>b.ts-a.ts);
       return Promise.resolve({entries:list.slice(0,300)});
     }
@@ -170,6 +172,25 @@ const Store = (function(){
       db.entries.splice(i,1); saveL(db);
       return Promise.resolve({ok:true});
     }
+    if (path === '/feed'){
+      const qt = (o.query&&o.query.type) || o.type;
+      let list = db.entries.slice();
+      if (qt) list = list.filter(e=>e.type===qt);
+      list.sort((a,b)=>b.ts-a.ts);
+      return Promise.resolve({entries:list.slice(0,120).map(e=>Object.assign({},e,{groupName:(db.groups[e.group]||{}).name||''}))});
+    }
+    if ((m = path.match(/^\/groups\/([A-Za-z0-9]+)\/grades$/)) && !o.method){
+      const g = db.groups[m[1]]; if (!g) return Promise.reject(new Error('group not found'));
+      return Promise.resolve({grades:g.grades||[]});
+    }
+    if ((m = path.match(/^\/groups\/([A-Za-z0-9]+)\/grades$/)) && o.method==='POST'){
+      const g = db.groups[m[1]]; if (!g) return Promise.reject(new Error('group not found'));
+      const rec = {id:uid2(), memberId:String(body.memberId||''), authorName:String(body.authorName||'').slice(0,40),
+        subject:String(body.subject||'').slice(0,80), course:+body.course||1, grade:+body.grade, cred:+body.cred||null,
+        date:String(body.date||'').slice(0,10), ts:Date.now()};
+      g.grades = g.grades||[]; g.grades.push(rec); saveL(db);
+      return Promise.resolve({grade:rec});
+    }
     if ((m = path.match(/^\/sync\/(.+)$/)) && o.method==='PUT'){
       db.sync[decodeURIComponent(m[1])] = {ts:Date.now(), data:body};
       saveL(db);
@@ -187,7 +208,9 @@ const Store = (function(){
     async call(path, opts){
       await ready;
       if (staticMode) return handle(path.replace(/^\/api/, ''), opts);
-      const r = await fetch('/api'+path, Object.assign({headers:{'Content-Type':'application/json'}}, opts,
+      let url = '/api'+path;
+      if (opts && opts.query){ const qs = new URLSearchParams(opts.query).toString(); if (qs) url += '?'+qs; }
+      const r = await fetch(url, Object.assign({headers:{'Content-Type':'application/json'}}, opts,
         opts && opts.body ? {body: JSON.stringify(opts.body)} : {}));
       const j = await r.json().catch(()=>({error:'bad json'}));
       if (!r.ok){
@@ -218,6 +241,7 @@ function applyChrome(){
   window.LANG = S.lang;
   $('#lang-select').value = S.lang;
   $('#global-search').placeholder = t('search_placeholder');
+  const ab = $('#ai-btn'); if (ab) ab.onclick = ()=>go('ai');
   $('.small-print').textContent = t('disclaimer');
   $('#theme-btn').innerHTML = S.theme==='light'?ic('moon'):S.theme==='dark'?ic('sun'):ic('flame');
   buildDock();
@@ -248,6 +272,8 @@ const DOCK = [
   items:[['board','nav_board']]},
  {key:'train', lbl:{ru:'Тренажёры', uz:'Mashqlar', en:'Trainers'}, icon:'train', first:'patient',
   items:[['patient','nav_patient'],['tests','nav_tests'],['cards','nav_cards']]},
+ {key:'ai', lbl:{ru:'ИИ', uz:'AI', en:'AI'}, icon:'bot', first:'ai',
+  items:[['ai','nav_ai']]},
  {key:'diary', lbl:{ru:'Дневник', uz:'Kundalik', en:'Diary'}, icon:'diary', first:'curation',
   items:[['curation','nav_curation'],['skills','nav_skills'],['ops','nav_ops'],['cases','nav_cases'],['reflect','nav_reflect'],['duty','nav_duty']]},
  {key:'set', lbl:{ru:'Опции', uz:'Sozlash', en:'Options'}, icon:'set', first:'setgroup',
@@ -436,14 +462,10 @@ ROUTES.grades = function(){
       <div><label class="f">${t('credits')}</label><input type="number" id="g-cred" min="1" max="12" value="3"></div>
       <div><label class="f">${t('date')}</label><input type="date" id="g-date" value="${todayISO()}"></div>
     </div>
+    <div id="g-member-box"></div>
     <p><button class="btn" id="g-add">＋ ${t('add')}</button></p>
   </div>
-  <div class="card"><h3>${t('subject')}</h3><div class="table-wrap">
-    <table><thead><tr><th>${t('subject')}</th><th>${t('course')}</th><th>${t('grade')}</th><th>${t('credits')}</th><th>${t('date')}</th><th></th></tr></thead>
-    <tbody>${S.grades.slice().sort((a,b)=>b.date<a.date?-1:1).map(g=>`
-      <tr><td>${esc(g.subject)}</td><td>${t('course'+g.course)}</td><td><b>${g.grade}</b></td><td>${g.cred||'—'}</td><td>${g.date}</td>
-      <td><button class="btn small danger" data-del="${g.id}">${ic('trash')}</button></td></tr>`).join('') ||
-      `<tr><td colspan="6" class="muted">${t('empty')}</td></tr>`}</tbody></table></div>
+  <div class="card"><h3>${S.group&&S.group.me.role==='admin'?t('grades_all'):t('subject')}</h3><div id="g-tables"><div class="empty">${t('loading')}</div></div>
     <p><button class="btn secondary small" id="g-pdf">${ic('download')} PDF</button></p>
   </div>`;
 };
@@ -452,9 +474,43 @@ ROUTES.grades.after = function(){
     const sub = $('#g-sub'); const grade = +$('#g-grade').value;
     if (!sub.value || grade<2 || grade>5) return toast(t('required'));
     S.grades.push({id:uid(), subject:sub.value, course:+sub.selectedOptions[0].dataset.c, grade, cred:+$('#g-cred').value||null, date:$('#g-date').value||todayISO()});
-    save(); toast(t('saved')); go('grades');
+    save(); toast(t('saved'));
+    if (S.group){
+      const ms = $('#g-member');
+      const memberId = (S.group.me.role==='admin' && ms && ms.value) ? ms.value : S.group.me.id;
+      api(`/groups/${S.group.code}/grades`, {method:'POST', body:{memberId, authorName:S.group.me.name,
+        subject:sub.value, course:+sub.selectedOptions[0].dataset.c, grade, cred:+$('#g-cred').value||null,
+        date:$('#g-date').value||todayISO()}}).catch(e=>toast(e.message));
+    }
+    go('grades');
   };
   $$('[data-del]').forEach(b=>b.onclick=()=>{ S.grades = S.grades.filter(g=>g.id!==b.dataset.del); save(); go('grades'); });
+  function gradeTable(rows){
+    return `<div class="table-wrap"><table><thead><tr><th>${t('subject')}</th><th>${t('course')}</th><th>${t('grade')}</th><th>${t('credits')}</th><th>${t('date')}</th></tr></thead>
+    <tbody>${rows.slice().sort((a,b)=>(b.ts||0)-(a.ts||0)).map(g=>`
+      <tr><td>${esc(g.subject)}</td><td>${t('course'+(g.course||1))}</td><td><b>${g.grade}</b></td><td>${g.cred||'—'}</td><td>${g.date||''}</td></tr>`).join('') ||
+      `<tr><td colspan="5" class="muted">${t('empty')}</td></tr>`}</tbody></table></div>`;
+  }
+  (async ()=>{
+    const box = $('#g-tables'); if (!box) return;
+    if (!S.group){ box.innerHTML = gradeTable(S.grades); return; }
+    try{
+      const {group:grp} = await api(`/groups/${S.group.code}`);
+      const grades = (await api(`/groups/${S.group.code}/grades`)).grades || [];
+      const isAdmin = S.group.me.role==='admin';
+      if (isAdmin){
+        const mb = $('#g-member-box');
+        if (mb && !mb.innerHTML) mb.innerHTML = `<label class="f">${t('grade_for')}</label><select id="g-member">${grp.members.map(m=>`<option value="${m.id}"${m.id===S.group.me.id?' selected':''}>${esc(m.name)}${m.role==='admin'?' ★':''}</option>`).join('')}</select>`;
+        box.innerHTML = grp.members.map(m=>{
+          const rows = grades.filter(g=>g.memberId===m.id);
+          const avg = rows.length ? (rows.reduce((a,g)=>a+g.grade,0)/rows.length).toFixed(2) : '—';
+          return `<h3 style="font-size:.95rem;margin:14px 0 6px">${m.role==='admin'?ic('crown'):ic('grad')} ${esc(m.name)} <span class="muted">· GPA ${avg}</span></h3>` + gradeTable(rows);
+        }).join('') || `<div class="empty">${t('empty')}</div>`;
+      } else {
+        box.innerHTML = gradeTable(grades.filter(g=>g.memberId===S.group.me.id).concat(S.grades));
+      }
+    }catch(e){ box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+  })();
   $('#g-pdf').onclick = ()=>PDFX.download('medhub-ocenki.pdf', t('nav_grades'), [
     {kv:[t('gpa'), S.grades.length ? (S.grades.reduce((a,g)=>a+g.grade,0)/S.grades.length).toFixed(2) : '—']},
     {table:{head:[t('subject'),t('course'),t('grade'),t('credits'),t('date')],
@@ -552,20 +608,31 @@ function feedBanner(){
     ${ic('box')}<span class="muted" style="font-size:.85rem"> ${t('local_hint')}</span>
     <a href="#" data-goto="setgroup" style="font-size:.85rem;margin-left:6px">→ ${t('set_group_create')}</a></div>`;
 }
+let feedScope = 'group';
+const feedScopeBar = () => (Store.isStatic && Store.isStatic()) ? '' :
+  `<div class="feed-tabs">
+    <button class="ftab${feedScope==='group'?' on':''}" data-fs="group">${ic('users')} ${t('feed_group')}</button>
+    <button class="ftab${feedScope==='public'?' on':''}" data-fs="public">${ic('globe')} ${t('feed_public')}</button></div>`;
+function bindScopeBar(box, refresh){
+  box.querySelectorAll('.ftab').forEach(b=>b.onclick=()=>{ feedScope=b.dataset.fs; refresh(); });
+}
 async function fetchFeed(type){
+  if (feedScope==='public'){
+    try { return (await api('/feed', {query:{type}})).entries; } catch { return null; }
+  }
   if (!S.group) return localFeed(type);
-  try { const j = await api(`/groups/${S.group.code}/feed`, {type}); return j.entries; }
+  try { const j = await api(`/groups/${S.group.code}/feed`, {query:{type}}); return j.entries; }
   catch { return null; }
 }
 function entryHtml(e, extra=''){
   const mine = S.group && e.authorId === S.group.me.id;
   return `<div class="entry" data-eid="${e.id}">
-    <div class="meta">${visIcon(e.visibility)} <b>${esc(e.authorName)}</b> · ${fmtD(e.ts)}</div>
+    <div class="meta">${visIcon(e.visibility)} <b>${esc(e.authorName)}</b>${e.groupName?` <span class="badge">${ic('users')} ${esc(e.groupName)}</span>`:''} · ${fmtD(e.ts)}</div>
     ${e.title?`<div><b>${esc(e.title)}</b></div>`:''}
     ${e.meta&&e.meta.link?`<div>${ic('link')} <a href="${esc(e.meta.link)}" target="_blank" rel="noopener">${esc(e.meta.link)}</a></div>`:''}
     ${e.body?`<div class="body">${esc(e.body)}</div>`:''}
     ${extra}
-    ${(mine||(S.group&&S.group.me.role==='admin'))?`<div class="entry-actions"><button class="btn small danger" data-edel="${e.id}">${ic('trash')}</button></div>`:''}
+    ${((S.group&&e.group===S.group.code)&&(mine||(S.group&&S.group.me.role==='admin')))?`<div class="entry-actions"><button class="btn small danger" data-edel="${e.id}">${ic('trash')}</button></div>`:''}
   </div>`;
 }
 function bindFeedActions(container, type, refresh){
@@ -622,8 +689,8 @@ ROUTES.materials.after = async function(){
   const refresh = async ()=>{
     const box = $('#mat-feed');
     const entries = (await fetchFeed('material')) || [];
-    box.innerHTML = feedBanner() + ((entries.length) ? entries.map(e=>entryHtml(e)).join('') : `<div class="empty">${t('feed_empty')}</div>`);
-    bindFeedActions(box, 'material', refresh);
+    box.innerHTML = feedScopeBar() + feedBanner() + ((entries.length) ? entries.map(e=>entryHtml(e)).join('') : `<div class="empty">${t('feed_empty')}</div>`);
+    bindFeedActions(box, 'material', refresh); bindScopeBar(box, refresh);
   };
   $('#m-post').onclick = async ()=>{
     const title=$('#m-title').value.trim(), link=$('#m-link').value.trim(), body=$('#m-body').value.trim();
@@ -660,12 +727,12 @@ ROUTES.errors.after = async function(){
   const refresh = async ()=>{
     const box = $('#err-feed');
     const entries = (await fetchFeed('error')) || [];
-    box.innerHTML = feedBanner() + ((entries&&entries.length) ? entries.map(e=>{
+    box.innerHTML = feedScopeBar() + feedBanner() + ((entries&&entries.length) ? entries.map(e=>{
       const html = entryHtml(e, `<div class="comment">${ic('x')} <b>${t('wrong_ans')}:</b> ${esc(e.meta&&e.meta.wrong||'—')}</div>
         <div class="comment">${ic('check')} <b>${t('right_ans')}:</b> ${esc(e.meta&&e.meta.right||'—')}</div>
         ${e.meta&&e.meta.lesson?`<div class="comment">${ic('info')} ${esc(e.meta.lesson)}</div>`:''}`);
       return html; }).join('') : `<div class="empty">${t('feed_empty')}</div>`);
-    bindFeedActions(box, 'error', refresh);
+    bindFeedActions(box, 'error', refresh); bindScopeBar(box, refresh);
   };
   $('#e-post').onclick = async ()=>{
     const q=$('#e-q').value.trim(), wrong=$('#e-wrong').value.trim(), right=$('#e-right').value.trim(), lesson=$('#e-lesson').value.trim();
@@ -1481,13 +1548,14 @@ ROUTES.cases.after = async function(){
   const refresh = async ()=>{
     const box = $('#cs-feed');
     const entries = (await fetchFeed('case')) || [];
-    box.innerHTML = feedBanner() + ((entries.length) ? entries.map(e=>{
+    box.innerHTML = feedScopeBar() + feedBanner() + ((entries.length) ? entries.map(e=>{
       const comments = (e.meta&&e.meta.comments||[]).map(c=>`<div class="comment"><b>${esc(c.authorName)}:</b> ${esc(c.text)}</div>`).join('');
+      if (feedScope==='public') return entryHtml(e);
       return entryHtml(e, comments + `<div style="display:flex;gap:6px;margin-top:8px">
         <input type="text" placeholder="${t('comment')}…" data-cin="${e.id}">
         <button class="btn small" data-csend="${e.id}">${t('send')}</button></div>`);
     }).join('') : `<div class="empty">${t('feed_empty')}</div>`);
-    bindFeedActions(box, 'case', refresh);
+    bindFeedActions(box, 'case', refresh); bindScopeBar(box, refresh);
     box.querySelectorAll('[data-csend]').forEach(b=>b.onclick=async()=>{
       const inp = box.querySelector(`[data-cin="${b.dataset.csend}"]`);
       if (!inp.value.trim()) return;
@@ -2452,8 +2520,7 @@ const Auth = (function(){
 
     if (view === 'choose'){
       box.innerHTML = `
-        <h3 style="margin-top:0">${ic('grad')} ${t('auth_welcome')}</h3>
-        <p class="muted" style="font-size:.88rem">${t('auth_choose')}</p>
+        <div class="auth-hero">${ic('grad')}<h3>${t('auth_welcome')}</h3><p class="muted" style="font-size:.92rem;margin:0">${t('auth_choose')}</p></div>
         <div class="auth-roles">
           <button class="auth-role" data-mode="create">${ic('crown')}<span><b>${t('auth_teacher')}</b><span class="muted">${t('auth_teacher_sub')}</span></span></button>
           <button class="auth-role" data-mode="join">${ic('users')}<span><b>${t('auth_student')}</b><span class="muted">${t('auth_student_sub')}</span></span></button>
@@ -2549,6 +2616,90 @@ const Auth = (function(){
   }
   return { show, maybeShow, copyText, inviteLink };
 })();
+
+
+/* ---------- ИИ-ассистент (Groq, только учебная медицина) ---------- */
+const AI = (function(){
+  const SYSTEM = 'Ты — ИИ-ассистент MedHub для студентов-медиков. Ты отвечаешь ТОЛЬКО на вопросы, связанные с учебной медициной: анатомия, гистология, биохимия, физиология, патология, фармакология, пропедевтика, клинические дисциплины, лабораторные нормы, диагностика, неотложные состояния (в учебных целях). Если вопрос не по учебной медицине — вежливо откажись одной фразой и предложи задать медицинский вопрос. Отвечай на языке вопроса (по умолчанию русский), кратко и структурировано: списки, ключевые термины с расшифровкой. Не назначай лечение конкретному человеку — давай только учебную информацию и напоминай сверяться с первоисточниками.';
+  const md = t => esc(t)
+    .replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')
+    .replace(/\*([^*\n]+)\*/g,'<i>$1</i>')
+    .replace(/`([^`]+)`/g,'<code>$1</code>')
+    .replace(/\n/g,'<br>');
+  function render(){
+    const log = $('#ai-log'); if (!log) return;
+    log.innerHTML = (S.aiChat||[]).map(m=>`<div class="aimsg ${m.role}"><div class="ab">${m.role==='assistant'?ic('bot'):ic('grad')}</div><div class="atxt">${md(m.content)}</div></div>`).join('') ||
+      `<div class="empty">${t('ai_hello')}</div>`;
+    log.scrollTop = log.scrollHeight;
+  }
+  async function send(q){
+    q = (q||'').trim();
+    if (!q) return;
+    if (!S.groqKey) return toast(t('ai_need_key'));
+    S.aiChat = S.aiChat||[];
+    S.aiChat.push({role:'user', content:q});
+    save(); render();
+    const inp = $('#ai-q'); if (inp) inp.value='';
+    const log = $('#ai-log');
+    if (log){
+      const tip = document.createElement('div');
+      tip.className = 'aimsg assistant typing';
+      tip.innerHTML = `<div class="ab">${ic('bot')}</div><div class="atxt"><span></span><span></span><span></span></div>`;
+      log.appendChild(tip); log.scrollTop = log.scrollHeight;
+    }
+    try{
+      const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {method:'POST',
+        headers:{'Authorization':'Bearer '+S.groqKey, 'Content-Type':'application/json'},
+        body: JSON.stringify({model:'llama-3.3-70b-versatile', temperature:0.35, max_tokens:1200,
+          messages:[{role:'system', content:SYSTEM}].concat(S.aiChat.slice(-14))})});
+      const j = await r.json().catch(()=>({}));
+      if (!r.ok) throw new Error(r.status===401 ? t('ai_bad_key') : ((j.error&&j.error.message)||('HTTP '+r.status)));
+      const ans = (j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content) || '—';
+      S.aiChat.push({role:'assistant', content:ans});
+      if (S.aiChat.length>40) S.aiChat = S.aiChat.slice(-40);
+      save();
+    }catch(e){ toast(e.message || t('ai_err')); }
+    render();
+  }
+  return {render, send};
+})();
+ROUTES.ai = function(){
+  const key = !!S.groqKey;
+  return head(t('nav_ai'), t('ai_hint')) + `
+  <div class="card ai-card">
+    <div class="ai-head"><div class="ai-bot">${ic('bot')}</div><div><h3 style="margin:0">${t('ai_title')}</h3>
+      <p class="muted small" style="margin:0">${t('ai_med_only')}</p></div></div>
+    ${key?`<p class="muted small" style="margin-bottom:0">${ic('check')} Groq · <a href="#" id="ai-key-reset">${t('ai_key_change')}</a></p>`:''}
+  </div>
+  <div class="card${key?' hidden':''}" id="ai-key-card">
+    <h3>${t('ai_key_title')}</h3>
+    <p class="muted small">Ключ хранится только в вашем браузере. Бесплатный ключ — <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a>.</p>
+    <div style="display:flex;gap:8px"><input type="password" id="ai-key" placeholder="gsk_…" autocomplete="off">
+    <button class="btn" id="ai-key-save">${t('ai_key_btn')}</button></div>
+  </div>
+  <div class="card${key?'':' hidden'}" id="ai-chat-card">
+    <div id="ai-log" class="ai-log"></div>
+    <div class="chiprow" id="ai-sug">
+      ${['ai_s1','ai_s2','ai_s3','ai_s4'].map(k=>`<button class="chip" data-q="${esc(t(k))}">${esc(t(k))}</button>`).join('')}
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <input type="text" id="ai-q" placeholder="${t('ai_ph')}">
+      <button class="btn" id="ai-send">${ic('send')}</button>
+    </div>
+    <p class="muted small" style="margin-bottom:0">${t('ai_disclaimer')} <a href="#" id="ai-clear">${t('ai_clear')}</a></p>
+  </div>`;
+};
+ROUTES.ai.after = function(){
+  const k = $('#ai-key-card'), cc = $('#ai-chat-card');
+  const sync = ()=>{ const has = !!S.groqKey; k.classList.toggle('hidden',has); cc.classList.toggle('hidden',!has); AI.render(); };
+  $('#ai-key-save').onclick = ()=>{ const v=$('#ai-key').value.trim(); if(!v) return toast(t('required')); S.groqKey=v; save(); sync(); toast(t('saved')); };
+  const rs = $('#ai-key-reset'); if (rs) rs.onclick = (e)=>{ e.preventDefault(); S.groqKey=''; save(); sync(); };
+  $('#ai-send').onclick = ()=>AI.send($('#ai-q').value);
+  $('#ai-q').addEventListener('keydown', e=>{ if (e.key==='Enter') AI.send($('#ai-q').value); });
+  $$('#ai-sug .chip').forEach(c=>c.onclick = ()=>AI.send(c.dataset.q));
+  const cl = $('#ai-clear'); if (cl) cl.onclick = (e)=>{ e.preventDefault(); S.aiChat=[]; save(); AI.render(); };
+  AI.render();
+};
 
 applyChrome();
 go('grades');
