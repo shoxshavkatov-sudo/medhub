@@ -316,7 +316,7 @@ dialog::backdrop{animation:fadeBk .25s ease}
   -webkit-backdrop-filter:blur(18px) saturate(180%);backdrop-filter:blur(18px) saturate(180%);
   border:1px solid var(--line);box-shadow:var(--shadow)}
 .board-tools{top:12px;left:12px;flex-wrap:wrap;max-width:calc(100% - 24px)}
-.board-acts{top:12px;right:12px}
+.board-acts{bottom:12px;left:12px}
 .board-zoom{bottom:12px;right:12px;padding:5px 8px}
 .btool{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;border:none;background:transparent;color:var(--text);cursor:pointer;transition:background .15s,transform .12s}
 .btool svg{width:20px;height:20px}
@@ -348,6 +348,6 @@ dialog::backdrop{animation:fadeBk .25s ease}
 #board-wrap:fullscreen{border-radius:0;border:none;height:100vh;width:100vw}
 @media (max-width:640px){
   .btool{width:34px;height:34px}
-  .board-acts{top:auto;bottom:62px;right:12px}
+  .board-acts{bottom:62px}
   #board-wrap{height:62vh}
 }
