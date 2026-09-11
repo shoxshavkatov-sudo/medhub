@@ -24,6 +24,7 @@ window.LANG = S.lang;
 
 /* ---------------- свои SVG-иконки (вместо эмодзи) ---------------- */
 const ICONS = {
+ bone:'<path d="M7 10a2.5 2.5 0 1 1 3-3l4-1 3 3-1 4a2.5 2.5 0 1 1-3 3l-4 1-3-3Z"/>',
  bot:'<rect x="4.5" y="8" width="15" height="11.5" rx="3.5"/><path d="M12 8V4.5M9 4.5h6"/><circle cx="9.3" cy="13.2" r="1.2"/><circle cx="14.7" cy="13.2" r="1.2"/><path d="M9.5 16.8h5"/>',
  check:'<path d="m4.5 12.5 5 5 10-11"/>',
  upload:'<path d="M12 16V4.5M12 4.5 7.5 9M12 4.5l4.5 4.5"/><path d="M4.5 15.5v3a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-3"/>',
@@ -267,7 +268,7 @@ const DOCK = [
  {key:'ref', lbl:{ru:'Справка', uz:'Ma’lumot', en:'Ref'}, icon:'ref', first:'icd',
   items:[['icd','nav_icd'],['drugs','nav_drugs'],['labs','nav_labs'],['protocols','nav_protocols'],['calcs','nav_calc']]},
  {key:'sims', lbl:{ru:'Симуляторы', uz:'Simulyator', en:'Sims'}, icon:'sims', first:'pain',
-  items:[['pain','nav_pain'],['auscult','nav_auscult'],['ecg','nav_ecg'],['atlas','nav_atlas']]},
+  items:[['pain','nav_pain'],['auscult','nav_auscult'],['ecg','nav_ecg'],['atlas','nav_atlas'],]},
  {key:'board', lbl:{ru:'Доска', uz:'Doska', en:'Board'}, icon:'board', first:'board',
   items:[['board','nav_board']]},
  {key:'train', lbl:{ru:'Тренажёры', uz:'Mashqlar', en:'Trainers'}, icon:'train', first:'patient',
@@ -314,6 +315,8 @@ function go(route, arg){
   const fn = ROUTES[route];
   $('#view').innerHTML = fn ? fn(arg) : '<div class="empty">404</div>';
   $('#view').scrollTop = 0;
+  const vv = $('#view');
+  vv.classList.remove('view-in'); void vv.offsetWidth; vv.classList.add('view-in');
   if (fn && fn.after) fn.after(arg);
   buildDock();
 }
@@ -436,6 +439,24 @@ const ZONE_ANAT = {head:'anat_nerves',face:'anat_nerves',eye:'anat_nerves',ear:'
  hip:'anat_skeleton',knee:'anat_skeleton',ankle:'anat_skeleton',foot:'anat_skeleton',skin:'anat_organs'};
 const anatBy = k => window.ANAT_LIB.find(a=>a.k===k);
 
+const ANAT_MODELS = [
+ {id:'overview-skeleton', n:'Скелет — обзор'},
+ {id:'overview-skull', n:'Череп'},
+ {id:'upper-limb', n:'Верхняя конечность'},
+ {id:'lower-limb', n:'Нижняя конечность'},
+ {id:'zone-shoulder', n:'Плечевой сустав'},
+ {id:'shoulder-and-pectoral-girdle-joints', n:'Плечевой пояс: суставы'},
+ {id:'rotator-cuff', n:'Вращательная манжета'},
+ {id:'zone-elbow', n:'Локоть'},
+ {id:'zone-hand', n:'Кисть'},
+ {id:'zone-hip', n:'Тазобедренный сустав'},
+ {id:'ant-thigh-hip-flexors', n:'Сгибатели бедра'},
+ {id:'zone-knee', n:'Коленный сустав'},
+ {id:'radial-nerve', n:'Лучевой нерв'},
+ {id:'upper-limb-forearm-anterior-compartment-muscles', n:'Мышцы предплечья'},
+ {id:'muscles-thorax-abdomen', n:'Мышцы груди, живота и спины'},
+ {id:'pelvicfloor', n:'Тазовое дно и промежность'}
+];
 /* =========================================================
    ROUTES
 ========================================================= */
@@ -1079,6 +1100,7 @@ ROUTES.ecg = function(){
   <div class="chiprow" id="ecg-list">
     ${window.ECGS.map(e=>`<button class="chip" data-e="${e.id}">${esc(e.n)}</button>`).join('')}
     <button class="chip" id="ecg-quiz-start">${ic('dice')} ${t('ecg_quiz')}</button>
+    <button class="chip" id="ecg-snd">${ic('headphones')} Звук: выкл</button>
   </div>
   <div class="canvas-wrap"><canvas id="ecg-cv"></canvas>
     <div class="ecg-hud" id="ecg-hud"><span class="ecg-heart">${ic('heart')}</span><b>—</b><small>${t('ecg_rate')}</small></div>
@@ -1090,12 +1112,16 @@ ROUTES.ecg = function(){
 };
 ROUTES.ecg.after = function(){
   const cv = $('#ecg-cv');
-  let paused = false, raf = null;
+  let paused = false, raf = null, sndOn = false, curHandle = null;
   const show = r => {
-    ECGRen.start(cv, r, S.theme, S.quality==='low'?0.6:1);
+    curHandle = ECGRen.start(cv, r, S.theme, S.quality==='low'?0.6:1, ()=>{
+      const h = $('#ecg-hud .ecg-heart');
+      if (h){ h.classList.add('beat'); setTimeout(()=>h.classList.remove('beat'), 180); }
+      const b = $('#ecg-hud b'); if (b){ b.style.transform='scale(1.22)'; setTimeout(()=>b.style.transform='', 140); }
+    });
+    if (curHandle && curHandle.setBeep) curHandle.setBeep(sndOn);
     const hud = $('#ecg-hud');
     hud.querySelector('b').textContent = r.rate || '--';
-    hud.querySelector('.ecg-heart').style.animationDuration = (r.rate ? (60/r.rate) : 1) + 's';
     $('#ecg-info').innerHTML = `<div class="card">
       <div class="meta"><span class="badge">${esc(r.cat)}</span> <span class="badge">${t('ecg_rate')}: ${r.rate||'—'}</span></div>
       <h3>${esc(r.n)}</h3>
@@ -1117,10 +1143,23 @@ ROUTES.ecg.after = function(){
         : `<p class="badge bad">${t('ecg_wrong')}. ${t('ecg_rhythm')}: <b>${esc(ecgQuiz.n)}</b></p>`;
       setTimeout(()=>show(ecgQuiz), 900);
     }); };
+  $('#ecg-snd').onclick = function(){
+    sndOn = !sndOn;
+    this.innerHTML = ic('headphones') + ' Звук: ' + (sndOn ? 'вкл' : 'выкл');
+    this.classList.toggle('on', sndOn);
+    if (curHandle && curHandle.setBeep) curHandle.setBeep(sndOn);
+  };
   $('#ecg-pause').onclick = function(){
     paused = !paused;
-    if (paused){ ECGRen.stop(); this.textContent='▶ '+t('ecg_play'); }
-    else { const cur = ecgQuiz || window.ECGS.find(e=>e.id==='sinus') || window.ECGS[0]; ECGRen.start(cv, cur, S.theme); this.textContent='⏸ '+t('ecg_pause'); }
+    if (paused){ ECGRen.stop(); this.innerHTML='▶ '+t('ecg_play'); }
+    else { const cur = ecgQuiz || window.ECGS.find(e=>e.id==='sinus') || window.ECGS[0];
+      curHandle = ECGRen.start(cv, cur, S.theme, S.quality==='low'?0.6:1, ()=>{
+        const h = $('#ecg-hud .ecg-heart');
+        if (h){ h.classList.add('beat'); setTimeout(()=>h.classList.remove('beat'), 180); }
+      });
+      if (curHandle && curHandle.setBeep) curHandle.setBeep(sndOn);
+      this.innerHTML='⏸ '+t('ecg_pause');
+    }
   };
   show(window.ECGS[0]);
 };
@@ -1923,7 +1962,10 @@ document.addEventListener('keydown', e=>{ if (e.key==='/' && document.activeElem
   e.preventDefault(); $('#global-search').focus(); } });
 document.addEventListener('click', e=>{
   const g = e.target.closest('[data-goto]');
-  if (g){ e.preventDefault(); go(g.dataset.goto); }
+  if (g){ e.preventDefault();
+    const parts = g.dataset.goto.split(':');
+    go(parts[0], parts.length>1 ? parts.slice(1).join(':') : undefined);
+  }
 });
 /* ================= ДОСКА (белая доска для ТВ/проектора) ================= */
 const Board = (function(){
@@ -2737,6 +2779,37 @@ const AI = (function(){
   }
   return {toggle, send, render};
 })();
+
+
+/* ---------- Анатомия 3D (Open3D / CASK) ---------- */
+ROUTES.anat3d = function(arg){
+  if (arg){
+    const m = ANAT_MODELS.find(x=>x.id===arg);
+    return head(m?m.n:arg, '') + `
+    <div class="card">
+      <p><button class="btn small secondary" data-goto="anat3d">${ic('undo')} ${t('back')}</button>
+      <span class="muted small" style="margin-left:8px">${ic('cursor')} Вращай мышью · колесо — зум · тыкай в структуры — покажу название</span></p>
+      <div class="body3d-box"><div class="body3d" id="anat3d-box" style="height:min(66vh,720px)"></div></div>
+      <p class="muted small" style="margin-bottom:0">Модели: Open3D / CASK Anatomy (CC BY-NC-SA, образование) · anatomytool.org</p>
+    </div>`;
+  }
+  return head(t('nav_anat3d'), t('anat3d_hint')) + `
+  <div class="grid g3">
+    ${ANAT_MODELS.map(m=>`<a class="card anat-card" data-goto="anat3d:${m.id}">${ic('bone')}<b>${esc(m.n)}</b><span class="muted small">3D · Open3D</span></a>`).join('')}
+  </div>`;
+};
+ROUTES.anat3d.after = function(arg){
+  if (!arg) return;
+  const box = $('#anat3d-box');
+  if (box && window.AnatViewer && window.AnatLoader){
+    fetch('models/anatomy/'+arg+'.glb').then(r=>{ if (!r.ok) throw new Error('HTTP '+r.status); return r.arrayBuffer(); })
+      .then(buf => AnatLoader.parse(buf))
+      .then(g => {
+        const clean = String(name).replace(/[_.]/g,' ').trim();
+        dlg(`<h3>${ic('info')} ${esc(clean.slice(0,60))}</h3><p class="muted">Название структуры из 3D-модели (латынь/англ.). Найди её в разделе «Справка» → МКБ или в «Атласе».</p><p><button class="btn" data-close>${t('close')}</button></p>`);
+      });
+  }
+};
 
 applyChrome();
 go('grades');

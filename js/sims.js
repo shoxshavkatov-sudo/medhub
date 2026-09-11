@@ -163,118 +163,223 @@ window.Ausc = (function(){
 
 /* ================= 3. ECG RENDERER (canvas) ================= */
 window.ECGRen = (function(){
-  let raf = null, state = null;
+  /* Мониторная развёртка: пишущая головка движется слева направо,
+     старый след остаётся «на бумаге», впереди — стирающая полоса.
+     Морфология P-QRS-T — сумма гауссиан (реалистичные зубцы). */
   const W = 900, H = 300;
-  function mm(v){ return v * 1.6; } // mm -> px scale (10mm/mV-ish)
-  function wave(ctx, x, y0, p, xEnd){
-    // draws one cardiac cycle starting at x; returns duration px consumed
-    const s = 0.09; // px per ms
-    const dur = (p.pr + 110 + p.qrs + 80 + 200) * s + 40;
-    let cx = x;
-    const line = (dx, dy)=>{ ctx.lineTo(cx+dx, y0+dy); cx += dx; };
-    // P wave
-    if (p.pAmp>0){ const pw = 90*s;
-      ctx.moveTo(cx, y0); ctx.quadraticCurveTo(cx+pw/2, y0-mm(p.pAmp), cx+pw, y0); cx += pw; }
-    cx += p.pr*s;
-    if (p.dissociation){} // P drawn separately
-    // QRS
-    if (p.chaotic) return dur;
-    if (p.wide){ // ventricular complex
-      ctx.moveTo(cx, y0);
-      ctx.quadraticCurveTo(cx+40*s, y0-mm(9), cx+80*s, y0+mm(3));
-      ctx.quadraticCurveTo(cx+110*s, y0-mm(7), cx+160*s, y0);
-      cx += 170*s;
-    } else if (p.qrs>0){
-      if (p.q) { line(12*s, mm(2)); }
-      line(20*s, -mm(11));
-      line(25*s, mm(p.q?9:4));
-      if (Math.abs(p.st)>0.1) line(70*s, -mm(p.st));
-      else line(60*s, 0);
-    }
-    // T
-    if (p.t>0){ const tw = 160*s;
-      ctx.lineTo(cx+tw/2, y0-mm(p.t*(p.tPeak?2:1))); ctx.lineTo(cx+tw, y0); cx += tw; }
-    else if (p.t<0){ const tw = 150*s;
-      ctx.lineTo(cx+tw/2, y0-mm(p.t)); ctx.lineTo(cx+tw, y0); cx += tw; }
-    ctx.lineTo(xEnd || x+600, y0);
-    return dur;
-  }
-  function drawFrame(ctx, st){
-    ctx.clearRect(0,0,W,H);
-    // grid
-    ctx.strokeStyle = st.theme==='night' ? '#4a2a12' : '#3b1f1f';
-    ctx.lineWidth = 0.5;
-    for (let x=0;x<W;x+=20){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
-    for (let y=0;y<H;y+=20){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
-    ctx.strokeStyle = st.theme==='night' ? '#6b3c18' : '#5a2a2a'; ctx.lineWidth = 1;
-    for (let x=0;x<W;x+=100){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
-    for (let y=0;y<H;y+=100){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
-    const p = st.p, y0 = H*0.45, px = 0.09;
-    ctx.strokeStyle = st.theme==='night' ? '#ffd9a8' : '#eafbe9';
-    ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    ctx.shadowColor = st.theme==='night' ? 'rgba(255,170,90,.85)' : 'rgba(110,240,160,.85)';
-    ctx.shadowBlur = 9;
-    ctx.beginPath();
-    if (p.chaotic){ // VF
-      let y = y0;
-      for (let x=0;x<W;x+=3){ y = y0 + Math.sin(x*0.08+st.t*8)*mm(4)*Math.sin(x*0.013+st.t*3) + Math.sin(x*0.21-st.t*11)*mm(2.5);
-        x===0?ctx.moveTo(x,y):ctx.lineTo(x,y); }
-    } else if (p.dissociation){ // CHB: independent P and QRS
-      const pr = 950*px, qr = 1600*px;
-      const po = st.off % pr, qo = st.off % qr;
-      for (let x=-200;x<W;x+=pr){ const bx = x+po; if (bx<-40||bx>W+40) continue;
-        ctx.moveTo(bx,y0); ctx.quadraticCurveTo(bx+13, y0-mm(p.pAmp), bx+27, y0); }
-      for (let x=-300;x<W;x+=qr){ const bx = x+qo; if (bx<-60||bx>W+60) continue;
-        ctx.moveTo(bx,y0); ctx.lineTo(bx+8,y0+mm(2)); ctx.lineTo(bx+18,y0-mm(10)); ctx.lineTo(bx+30,y0+mm(3)); ctx.lineTo(bx+46,y0);
-        ctx.lineTo(bx+70,y0); ctx.quadraticCurveTo(bx+85,y0-mm(2.5),bx+100,y0); }
-      ctx.moveTo(0,y0); ctx.lineTo(W,y0);
-    } else if (p.fWave){ // AF: fibrillatory baseline + irregular QRS, no P
-      for (let x=0;x<W;x+=2){
-        const y = y0 + Math.sin(x*0.35+st.t*14)*mm(0.55) + Math.sin(x*0.11-st.t*9)*mm(0.4);
-        ctx.lineTo(x,y);
-      }
-      let gap = 420 + ((st.t*137|0)%7)*80; // pseudo-irregular spacing shifting over time
-      let x = -(st.off % 900);
-      while (x < W){
-        ctx.moveTo(x,y0); ctx.lineTo(x+5,y0+mm(2.5)); ctx.lineTo(x+14,y0-mm(10)); ctx.lineTo(x+26,y0+mm(3.5));
-        ctx.lineTo(x+46,y0); ctx.quadraticCurveTo(x+60,y0-mm(2.5),x+74,y0);
-        gap = 320 + (Math.abs(Math.sin(x*0.017+st.t))*520);
-        x += gap;
-      }
-      ctx.moveTo(0,y0); ctx.lineTo(W,y0);
-    } else {
-      const cyc = (60000/st.rate)*px; // px per beat
-      const dropMod = p.drop ? 3 : 0;
-      let x = -((st.off) % cyc) - cyc;
-      let beatNo = Math.floor(st.off/cyc);
-      while (x < W + cyc){
-        const isDrop = dropMod && ((beatNo + st.phase) % (dropMod+1) === dropMod);
-        if (isDrop){ // P then pause (Mobitz II)
-          ctx.moveTo(x,y0); ctx.quadraticCurveTo(x+13,y0-mm(p.pAmp),x+27,y0);
-        } else {
-          wave(ctx, x, y0, p, Math.min(x+cyc*1.2, W));
-        }
-        x += cyc; beatNo++;
-      }
-      ctx.moveTo(0,y0);
-    }
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-  }
-  function start(canvas, rhythm, theme, speed=1){
-    stop(); const ctx = canvas.getContext('2d');
-    canvas.width = W; canvas.height = H;
-    const p = Object.assign({}, rhythm.p);
-    if (rhythm.id==='pericard'){ p.prDown = true; p.concave = true; }
-    state = {p, off:0, t:0, theme, phase:0, speed, rate: rhythm.rate || 75};
-    const loop = () => {
-      state.t += 0.016*speed; state.off += 140*0.016*speed*(rhythm.rate?Math.max(rhythm.rate/75,0.6):1);
-      drawFrame(ctx, state);
-      raf = requestAnimationFrame(loop);
+  let raf = null;
+
+  const G = (t, c, w, a) => a * Math.exp(-((t - c) * (t - c)) / (2 * w * w));
+
+  function makeBeatFn(p){
+    // возвращает f(tp мс от начала комплекса) -> мм
+    const pr = p.pr || 160, qd = 100;               // QRS длительность, мс
+    const qA = p.q ? -1.6 : -0.6;                   // амплитуда Q
+    const rA = p.wide ? 8.5 : 11;                   // амплитуда R
+    const sA = p.wide ? -4 : (p.q ? -3.2 : -2.4);   // амплитуда S
+    const rw = p.wide ? 16 : 7;                     // полуширина R
+    const st = p.st || 0;
+    const tA = (p.t || 0) * (p.tPeak ? 2 : 1) * 1.9;
+    const tW = p.wide ? 52 : 42;
+    const inv = p.tInv;
+    return tp => {
+      let y = 0;
+      if (p.pAmp > 0) y += G(tp, pr * .5, 26, p.pAmp);           // P
+      y += G(tp, qd * .30, rw * .55, qA);                        // Q
+      y += G(tp, qd * .45, rw, rA);                              // R
+      y += G(tp, qd * .68, rw * .7, sA);                         // S
+      y += st * (tp > qd * .9 && tp < qd * 2.4 ? 1 : 0) * G(tp, qd * 1.6, 60, 1); // ST
+      const tAmp = inv ? -Math.abs(tA || 2.4) : tA;
+      if (p.t !== 0) y += G(tp, qd * 2.1, tW, tAmp);             // T
+      return y;
     };
-    loop();
   }
-  function stop(){ if (raf) cancelAnimationFrame(raf); raf=null; }
+
+  function start(canvas, rhythm, theme, speed, onBeat){
+    stop();
+    const ctx = canvas.getContext('2d');
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = '100%'; canvas.style.height = 'auto';
+    ctx.scale(dpr, dpr);
+
+    // «бумага» — сюда пишется след
+    const paper = document.createElement('canvas');
+    paper.width = W * dpr; paper.height = H * dpr;
+    const pctx = paper.getContext('2d');
+    pctx.scale(dpr, dpr);
+
+    const night = theme === 'night', dark = theme === 'dark';
+    // сетка ЭКГ-бумаги
+    const grid = (c1, c2, step1, step2) => {
+      pctx.lineWidth = .5; pctx.strokeStyle = c1;
+      for (let x = 0; x <= W; x += step1){ pctx.beginPath(); pctx.moveTo(x, 0); pctx.lineTo(x, H); pctx.stroke(); }
+      for (let y = 0; y <= H; y += step1){ pctx.beginPath(); pctx.moveTo(0, y); pctx.lineTo(W, y); pctx.stroke(); }
+      pctx.lineWidth = 1; pctx.strokeStyle = c2;
+      for (let x = 0; x <= W; x += step2){ pctx.beginPath(); pctx.moveTo(x, 0); pctx.lineTo(x, H); pctx.stroke(); }
+      for (let y = 0; y <= H; y += step2){ pctx.beginPath(); pctx.moveTo(0, y); pctx.lineTo(W, y); pctx.stroke(); }
+    };
+    const gc = night ? ['rgba(224,150,80,.14)', 'rgba(224,150,80,.32)', 12, 60]
+                     : dark ? ['rgba(90,160,255,.10)', 'rgba(90,160,255,.26)', 12, 60]
+                            : ['rgba(220,60,60,.12)', 'rgba(200,50,50,.30)', 12, 60];
+    grid(gc[0], gc[1], gc[2], gc[3]);
+
+    const traceCol = night ? '#ffb45e' : dark ? '#5ee0a0' : '#19c37d';
+    const glowCol  = night ? 'rgba(255,170,90,.9)' : dark ? 'rgba(94,224,160,.9)' : 'rgba(25,195,125,.9)';
+
+    const p0 = Object.assign({}, rhythm.p || {});
+    if (rhythm.id === 'pericard'){ p0.st = 1.6; p0.pAmp = p0.pAmp || 1.2; }
+    const chaotic = p0.chaotic;         // ФЖ
+    const dissoc = p0.dissociation;     // полная АВ-блокада
+    const fWave = p0.fWave;             // ФП
+    const drop = p0.drop;               // Мобиц II
+    const baseRate = rhythm.rate || 75;
+    let beatFn = makeBeatFn(p0);
+
+    // расписание комплексов
+    let beats = [];            // {at, rr, skipQRS, fn}
+    let tSim = 0, nextAt = 400, beatIdx = 0, lastR = -1;
+    function schedule(t){
+      while (nextAt < t + 4000){
+        let rr;
+        if (fWave) rr = 320 + Math.random() * 480;                       // абс. аритмия
+        else rr = 60000 / baseRate;
+        const skip = drop && (beatIdx % 4 === 2);                        // Мобиц II 3:2→4:3-иш
+        const fn = makeBeatFn(p0);
+        beats.push({at: nextAt, rr, skipQRS: skip, fn});
+        if (!skip) nextAt += rr; else nextAt += rr * 1.15;
+        beatIdx++;
+      }
+      beats = beats.filter(b => b.at > t - 3000);
+    }
+
+    const mm = v => v * 1.7;
+    let sx = 0, lastY = 0, prev = null, Tsim = 0;
+    const V = 130;                       // скорость развёртки, px/с
+    const GAP = 26;                      // стирающая полоса
+    let beepOn = false, lastBeepT = 0;
+
+    function beep(){
+      if (!beepOn) return;
+      try{
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        window.__ecgAC = window.__ecgAC || new AC();
+        const ac = window.__ecgAC;
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = 'sine'; o.frequency.value = 880;
+        g.gain.setValueAtTime(.06, ac.currentTime);
+        g.gain.exponentialRampToValueAtTime(.0001, ac.currentTime + .09);
+        o.connect(g); g.connect(ac.destination);
+        o.start(); o.stop(ac.currentTime + .1);
+      }catch(e){}
+    }
+
+    function yAt(t){
+      // значение кривой (мм) в момент t (мс симуляции)
+      if (chaotic){
+        return Math.sin(t * .021) * 3.4 * Math.sin(t * .0053 + 1.7)
+             + Math.sin(t * .043 + 2.1) * 2.2 * Math.sin(t * .011)
+             + Math.sin(t * .093) * 1.1;
+      }
+      schedule(t);
+      let y = 0;
+      // предсердная активность
+      if (dissoc){
+        const pr = 950;
+        const tp = t % pr;
+        if (p0.pAmp > 0) y += G(tp, pr * .45, 26, p0.pAmp);
+      } else if (fWave){
+        y += Math.sin(t * .085) * .5 + Math.sin(t * .147 + 1.3) * .35;
+      } else if (drop){
+        // P рисуется на все комплексы (даже выпавшие)
+      }
+      // желудочный комплекс
+      for (let i = beats.length - 1; i >= 0; i--){
+        const b = beats[i];
+        if (t >= b.at && t < b.at + b.rr + 200){
+          if (!b.skipQRS) y += b.fn(t - b.at);
+          break;
+        }
+      }
+      return y;
+    }
+
+    let pending = false, kicker = null;
+    function kick(){
+      if (pending) return;
+      pending = true;
+      const run = ts => { if (!pending) return; pending = false; frame(ts); };
+      raf = requestAnimationFrame(run);
+      kicker = setTimeout(() => run(performance.now()), 110);
+    }
+    function frame(ts){
+      window.__ecgFrames = (window.__ecgFrames||0)+1;
+      try {
+      if (!prev) prev = ts;
+      let dt = (ts - prev) / 1000; prev = ts;
+      if (dt > .12) dt = .12;
+      dt *= speed;
+      Tsim += 0; // (время уже растёт выше)
+      const dx = V * dt;
+      Tsim += dt * 1000;
+      schedule(Tsim);
+      let x1 = sx, x2 = sx + dx;
+      if (x2 >= W){ x2 = W; sx = 0; } else sx = x2;
+      // пишем новый сегмент следа (непрерывное время!)
+      const step = 1.25;
+      pctx.lineWidth = 2.1; pctx.lineCap = 'round'; pctx.lineJoin = 'round';
+      pctx.strokeStyle = traceCol;
+      pctx.beginPath();
+      let first = true;
+      for (let x = x1; x <= x2; x += step){
+        const tt = Tsim - (x2 - x) / V * 1000;
+        const y = mm(yAt(tt));
+        if (first){ pctx.moveTo(x, H * .46 - y); first = false; }
+        else pctx.lineTo(x, H * .46 - y);
+        lastY = y;
+      }
+      pctx.stroke();
+      // «бип» на пересечении R (грубая эвристика: резкий пик в последней точке)
+      if (lastY > 6 && Tsim - lastBeepT > .25){ beep(); lastBeepT = Tsim; if (onBeat) onBeat(); }
+      // стирающая полоса впереди головки
+      pctx.save();
+      pctx.globalCompositeOperation = 'destination-out';
+      pctx.fillStyle = 'rgba(0,0,0,.95)';
+      const ex = (sx + 4) % W;
+      pctx.fillRect(ex, 0, GAP, H);
+      pctx.restore();
+      // перерисовка сетки в стёртой полосе
+      pctx.lineWidth = .5; pctx.strokeStyle = gc[0];
+      for (let x = Math.floor(ex / gc[2]) * gc[2]; x <= ex + GAP; x += gc[2]){ pctx.beginPath(); pctx.moveTo(x, 0); pctx.lineTo(x, H); pctx.stroke(); }
+      for (let y = 0; y <= H; y += gc[2]){ pctx.beginPath(); pctx.moveTo(Math.max(ex, 0), y); pctx.lineTo(ex + GAP, y); pctx.stroke(); }
+
+      // вывод на экран: бумага + светящаяся головка
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(paper, 0, 0);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const hx = sx, hy = H * .46 - lastY;
+      ctx.save();
+      ctx.shadowColor = glowCol; ctx.shadowBlur = 14;
+      ctx.fillStyle = night ? '#ffe9c9' : '#eafff2';
+      ctx.beginPath(); ctx.arc(hx, hy, 3.4, 0, 7); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = night ? '#ffb45e' : dark ? '#5ee0a0' : '#19c37d';
+      ctx.beginPath(); ctx.arc(hx, hy, 2.2, 0, 7); ctx.fill();
+      ctx.restore();
+      } catch(err){ window.__ecgErr = String(err && err.message || err).slice(0,250); }
+      pending = false;
+      kick();
+    }
+    kick();
+
+    return {
+      setBeep(v){ beepOn = v; },
+      W, H
+    };
+  }
+  function stop(){ if (raf) cancelAnimationFrame(raf); raf = null; }
   return {start, stop, W, H};
 })();
 

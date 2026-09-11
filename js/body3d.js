@@ -2,16 +2,26 @@
    вращение, зум, «рентген», анимация, тыкабельные точки */
 window.Body3D = (function(){
   const modelCaches = {}; // url -> Promise<{scene, animations}>
+  let dracoLoader = null;
+  function getDraco(){
+    if (!dracoLoader && window.THREE && THREE.DRACOLoader){
+      dracoLoader = new THREE.DRACOLoader();
+      dracoLoader.setDecoderPath('vendor/draco/');
+    }
+    return dracoLoader;
+  }
 
   function loadModel(url){
     url = url || 'models/human.glb';
     if (modelCaches[url]) return modelCaches[url];
     modelCaches[url] = new Promise((res, rej)=>{
       if (!window.THREE || !window.THREE.GLTFLoader) return rej(new Error('no loader'));
-      new THREE.GLTFLoader().load(url,
-        g => res({scene: g.scene, animations: g.animations || []}),
-        undefined,
-        err => { delete modelCaches[url]; rej(err); });
+      const loader = new THREE.GLTFLoader();
+      const dr = getDraco(); if (dr) loader.setDRACOLoader(dr);
+      fetch(url).then(r=>{ if (!r.ok) throw new Error('HTTP '+r.status); return r.arrayBuffer(); })
+        .then(buf => new Promise((rs, rj) => loader.parse(buf, '', rs, rj)))
+        .then(g => res({scene: g.scene, animations: g.animations || []}))
+        .catch(err => { delete modelCaches[url]; rej(err); });
     });
     return modelCaches[url];
   }
@@ -225,9 +235,16 @@ window.Body3D = (function(){
       }
     }
     let raf = 0;
+    let pending = false, kicker = null;
+    function kick(){
+      if (pending) return;
+      pending = true;
+      const run = () => { if (!pending) return; pending = false; loop(); };
+      raf = requestAnimationFrame(run);
+      kicker = setTimeout(run, 110);
+    }
     const clock = new THREE.Clock();
     function loop(){
-      raf = requestAnimationFrame(loop);
       if (!renderer.domElement.isConnected){ dispose(); return; }
       const dt = clock.getDelta();
       if (mixer) mixer.update(dt);
@@ -251,10 +268,132 @@ window.Body3D = (function(){
       renderer.setSize(w,h);
     });
     ro.observe(container);
-    loop();
+    kick();
 
     container._body3d = { setPoints, setSkin, _three:{scene,camera,renderer,body,markers} };
     return container._body3d;
   }
   return { create, px2world };
+})();
+
+/* ---------- универсальный просмотрщик GLB (анатомия) ---------- */
+window.AnatViewer = (function(){
+  function open(container, gltf, onPick){
+    const url = null;
+    if (!window.THREE || !window.THREE.OrbitControls || !window.THREE.GLTFLoader) return null;
+    try { const t=document.createElement('canvas'); if (!t.getContext('webgl') && !t.getContext('experimental-webgl')) return null; } catch(e){ return null; }
+    const THREE = window.THREE;
+    let W = container.clientWidth || 600, H = container.clientHeight || 560;
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(40, W/H, .01, 100);
+    camera.position.set(0, .4, 2.6);
+    const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+    renderer.setSize(W, H);
+    renderer.domElement.style.display='block';
+    container.appendChild(renderer.domElement);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x445066, 1.1));
+    const d1 = new THREE.DirectionalLight(0xffffff, .95); d1.position.set(2,3,4); scene.add(d1);
+    const d2 = new THREE.DirectionalLight(0x93b4ff, .5); d2.position.set(-3,1.5,-2); scene.add(d2);
+    const root = new THREE.Group(); scene.add(root);
+
+    let picking = [];
+    {
+      const obj = gltf.scene;
+      const box = new THREE.Box3().setFromObject(obj);
+      const size = box.getSize(new THREE.Vector3());
+      const maxDim = Math.max(size.x, size.y, size.z);
+      let k = (maxDim > 1e-4 && maxDim < 1000) ? 1.6/maxDim : 1;
+      if (!isFinite(k) || k<=0) k = 1;
+      obj.scale.setScalar(k);
+      const b2 = new THREE.Box3().setFromObject(obj);
+      const c = b2.getCenter(new THREE.Vector3());
+      obj.position.set(-c.x, -c.y, -c.z);
+      root.add(obj);
+      picking = [];
+      obj.traverse(o=>{ if (o.isMesh) picking.push(o); });
+      container._anat = {state:'ok', meshes:picking.length, k, maxDim:+maxDim.toFixed(2)};
+      }
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.target.set(0,0,0);
+    controls.enableDamping = true; controls.dampingFactor = .08;
+    controls.minDistance = .4; controls.maxDistance = 12;
+    let auto = true, downXY = null;
+    renderer.domElement.addEventListener('pointerdown', e=>{ auto=false; downXY=[e.clientX,e.clientY]; });
+    const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+    function cast(e){
+      const r = renderer.domElement.getBoundingClientRect();
+      ndc.x = ((e.clientX-r.left)/r.width)*2-1;
+      ndc.y = -((e.clientY-r.top)/r.height)*2+1;
+      ray.setFromCamera(ndc, camera);
+      const hits = ray.intersectObjects(picking, false);
+      for (const h of hits){
+        let o = h.object;
+        while (o && !o.name) o = o.parent;
+        if (o && o.name) return o.name;
+        return h.object.uuid;
+      }
+      return null;
+    }
+    renderer.domElement.addEventListener('pointerup', e=>{
+      if (!downXY) return;
+      const moved = Math.hypot(e.clientX-downXY[0], e.clientY-downXY[1]); downXY=null;
+      if (moved>7 || !onPick) return;
+      const name = cast(e);
+      if (name) onPick(name);
+    });
+    renderer.domElement.addEventListener('pointermove', e=>{
+      renderer.domElement.style.cursor = cast(e) ? 'pointer' : 'grab';
+    });
+    let raf = 0;
+    let pending = false, kicker = null;
+    function kick(){
+      if (pending) return;
+      pending = true;
+      const run = () => { if (!pending) return; pending = false; loop(); };
+      raf = requestAnimationFrame(run);
+      kicker = setTimeout(run, 110);
+    }
+    const clock = new THREE.Clock();
+    function loop(){
+      if (!renderer.domElement.isConnected){ dispose(); return; }
+      try {
+        renderer.render(scene, camera);
+      } catch(err){ window.__anatErr = String(err && err.message || err).slice(0,300); }
+    }
+    function dispose(){
+      cancelAnimationFrame(raf);
+      controls.dispose();
+      renderer.dispose();
+      if (renderer.domElement.parentNode) renderer.domElement.parentNode.removeChild(renderer.domElement);
+    }
+    const ro = new ResizeObserver(()=>{
+      const w = container.clientWidth, h = container.clientHeight;
+      if (!w || !h) return;
+      W=w; H=h;
+      camera.aspect = w/h; camera.updateProjectionMatrix();
+      renderer.setSize(w,h);
+    });
+    ro.observe(container);
+    kick();
+    return { dispose };
+  }
+  return { open };
+})();
+
+/* загрузка GLB снаружи (проверенный путь: fetch+parse) */
+window.AnatLoader = (function(){
+  let dracoLoader = null;
+  return {
+    parse(buf){
+      const loader = new THREE.GLTFLoader();
+      if (!dracoLoader && THREE.DRACOLoader){
+        dracoLoader = new THREE.DRACOLoader();
+        dracoLoader.setDecoderPath('vendor/draco/');
+      }
+      if (dracoLoader) loader.setDRACOLoader(dracoLoader);
+      return new Promise((res, rej) => loader.parse(buf, '', res, rej));
+    }
+  };
 })();
