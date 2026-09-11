@@ -1,18 +1,56 @@
+/* Информация об органах для 3D-тела */
+window.ORGAN_INFO = {
+  brain:'Центр управления: мышление, память, движения и ощущения. Потребляет ~20% всей энергии организма.',
+  heart:'Мышечный насос: гонит кровь по большому и малому кругу кровообращения. ~100 000 сокращений в сутки.',
+  lungs:'Газообмен: отдают кислород в кровь и выводят углекислый газ. В правом лёгком 3 доли, в левом — 2 (место для сердца).',
+  lungs2:'Газообмен: отдают кислород в кровь и выводят углекислый газ. В правом лёгком 3 доли, в левом — 2 (место для сердца).',
+  liver:'Главный химзавод: обезвреживает токсины, вырабатывает жёлчь, запасает гликоген. Способна регенерировать.',
+  stomach:'Мешок для переваривания: кислота (pH 1.5–2) убивает микробы, ферменты расщепляют белки.',
+  gut:'Тонкий кишечник всасывает питательные вещества, толстый — воду и формирует кал. Длина ~7–9 м.',
+  kidney:'Фильтр крови: выводят продукты обмена с мочой, держат давление и водно-солевой баланс.',
+  bladder:'Мышечный мешок: накапливает мочу (до 400–600 мл) и выводит её через уретру.'
+};
 /* MedHub — simulators: body map SVG, WebAudio auscultation, ECG renderer, atlas schematics */
 
 /* ================= 1. BODY MAP (real 3D body photo + zone overlay) ================= */
 window.BodyMap = (function(){
   const BASE = {male:'img/body_blue.jpg', female:'img/anat_digestive.jpg', child:'img/body_blue.jpg'};
-  function html(mode){
+  function pointsFor(mode, only){
     const pos = window.PAIN_POS[mode] || window.PAIN_POS.male;
-    let dots = '';
+    const pts = [];
     for (const z of window.PAIN_ZONES){
       const p = pos[z.id]; if (!p) continue;
+      if (only && z.id !== only) continue;
+      pts.push({id:z.id, label:z.n, u:p[0], v:p[1]});
+    }
+    return pts;
+  }
+  function html(mode, only){
+    const pts = pointsFor(mode, only);
+    if (window.Body3D && pts.length){
+      return `<div class="body3d-box"><div class="body3d" data-bm3d="${mode}" data-only="${only||''}"></div>
+        <div class="body3d-bar">${ic3dHint()}<label class="xray-lbl"><input type="range" min="15" max="100" value="100" class="xray-range"> <span data-i18n="xray"></span></label></div></div>`;
+    }
+    let dots = '';
+    for (const z of window.PAIN_ZONES){
+      const p = (window.PAIN_POS[mode]||{})[z.id]; if (!p) continue;
+      if (only && z.id !== only) continue;
       dots += `<button class="zone-dot" data-zone="${z.id}" style="left:${p[0]}%;top:${p[1]}%" title="${z.n}" aria-label="${z.n}"></button>`;
     }
     return `<div class="body-photo"><img src="${BASE[mode]}" alt="" draggable="false">${dots}</div>`;
   }
+  function ic3dHint(){ return '<span class="body3d-hint">Вращайте мышью · колесо — зум · тыкайте в точки</span>'; }
   function bind(container, onZone){
+    const box = container.querySelector('[data-bm3d]');
+    if (box && window.Body3D){
+      const mode = box.dataset.bm3d, only = box.dataset.only || undefined;
+      const inst = window.Body3D.create(box, {mode, points:pointsFor(mode, only), color:0x2f6fed,
+        onPick:(id)=>{ if (id) onZone(id); },
+        onOrgan:(oid)=>{ if (window.organDlg) window.organDlg(oid); }});
+      const xr = container.querySelector('.xray-range');
+      if (xr && inst) xr.oninput = ()=> inst.setSkin(+xr.value/100);
+      return;
+    }
     container.querySelectorAll('.zone-dot').forEach(el=>{
       const pick = () => {
         container.querySelectorAll('.zone-dot').forEach(d=>d.classList.remove('sel'));
@@ -23,7 +61,7 @@ window.BodyMap = (function(){
       el.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' ') {e.preventDefault();pick();} });
     });
   }
-  return {html, bind, BASE};
+  return {html, bind, BASE, pointsFor};
 })();
 
 /* ================= 2. AUSCULTATION SYNTH (WebAudio) ================= */

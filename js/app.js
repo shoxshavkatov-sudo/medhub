@@ -411,6 +411,20 @@ const visSelect = (cur='group') => `<label class="f">${t('visibility')}</label>
   <select id="f-vis"><option value="private" ${cur==='private'?'selected':''}>${t('vis_private')}</option>
   <option value="group" ${cur==='group'?'selected':''}>${t('vis_group')}</option>
   <option value="public" ${cur==='public'?'selected':''}>${t('vis_public')}</option></select>`;
+function organDlg(oid){
+  const names = {brain:'Мозг', heart:'Сердце', lungs:'Лёгкое', lungs2:'Лёгкое', liver:'Печень', stomach:'Желудок', gut:'Кишечник', kidney:'Почка', bladder:'Мочевой пузырь'};
+  const key = String(oid||'').toLowerCase();
+  const map = [['heart','heart'],['lung','lungs'],['liver','liver'],['stomach','stomach'],['intestin','gut'],['gut','gut'],['kidney','kidney'],['bladder','bladder'],['brain','brain'],['cerebr','brain']];
+  let info = (window.ORGAN_INFO||{})[oid];
+  let name = names[oid];
+  if (!info){
+    for (const [kw, kk] of map){ if (key.includes(kw)){ info = (window.ORGAN_INFO||{})[kk]; name = names[kk]; break; } }
+  }
+  if (!name) name = String(oid).replace(/[_.]/g,' ').slice(0,40);
+  if (!info) info = 'Фрагмент анатомической модели туловища. Наведённый в 3D орган — часть системы организма; подробнее в разделах «Справка» и «Атлас».';
+  dlg(`<h3>${ic('info')} ${esc(name)}</h3><p style="line-height:1.55">${esc(info)}</p><p><button class="btn" data-close>${t('close')}</button></p>`);
+}
+window.organDlg = organDlg;
 const visIcon = v => v==='private'?ic('lock'):v==='public'?ic('globe'):ic('users');
 
 /* --- real anatomy mapping for pain zones --- */
@@ -1023,25 +1037,38 @@ ROUTES.auscult = function(){
 };
 ROUTES.auscult.after = function(){
   $$('#ausc-tabs .chip').forEach(b=>b.onclick=()=>{ auscCat=b.dataset.c; Ausc.stop(); go('auscult'); });
-  let markers = '';
-  for (const snd of window.SOUNDS){ if (snd.cat!==auscCat) continue;
-    for (const p of snd.points){
-      markers += `<button class="ausc-pt" data-sound="${snd.id}" data-p="${esc(p.l)}" style="left:${p.x}%;top:${p.y}%" title="${esc(p.l)}" aria-label="${esc(p.l)}"></button>`; } }
-  $('#ausc-svg').innerHTML = `<div class="body-photo ausc-photo"><img src="img/body_blue.jpg" alt="" draggable="false">${markers}</div>`;
-  $('#ausc-svg').querySelectorAll('.ausc-pt').forEach(el=>{
-    const pick = ()=>{ const snd = window.SOUNDS.find(s=>s.id===el.dataset.sound);
+  const pickSound = (snd, pointLabel)=>{
       Ausc.play(snd.synth);
       $('#ausc-info').innerHTML = `<div class="card">
         <h3>${ic('headphones')} ${esc(snd.n)}</h3>
-        <p class="muted" style="font-size:.82rem">${ic('pin')} ${esc(el.dataset.p)}</p>
+        <p class="muted" style="font-size:.82rem">${ic('pin')} ${esc(pointLabel)}</p>
         <p><b>${t('ausc_findings')}:</b> ${esc(snd.desc)}</p>
         <p><b>${t('ausc_meaning')}:</b> ${esc(snd.meaning)}</p>
         <p><button class="btn danger small" id="ausc-stop">■ ${t('stop_sound')}</button></p></div>`;
       $('#ausc-stop').onclick = ()=>{ Ausc.stop(); };
     };
-    el.addEventListener('click', pick);
-    el.addEventListener('keydown', e=>{ if(e.key==='Enter') pick(); });
-  });
+    if (window.Body3D){
+      const pts = [];
+      for (const snd of window.SOUNDS){ if (snd.cat!==auscCat) continue;
+        for (const p of snd.points) pts.push({id:snd.id, label:p.l, u:p.x, v:p.y}); }
+      $('#ausc-svg').innerHTML = `<div class="body3d-box"><div class="body3d" id="ausc3d"></div>
+        <div class="body3d-bar"><span class="body3d-hint">Вращайте мышью · колесо — зум · тыкайте в точки</span>
+        <label class="xray-lbl"><input type="range" min="15" max="100" value="100" class="xray-range"> Рентген</label></div></div>`;
+      const inst = window.Body3D.create($('#ausc3d'), {mode:'male', points:pts, color:0x2f6fed,
+        onPick:(id,label)=>{ const snd = window.SOUNDS.find(s=>s.id===id); if (snd) pickSound(snd, label); },
+        onOrgan:(oid)=>{ organDlg(oid); }});
+      const xr = $('#ausc-svg .xray-range');
+      if (xr && inst) xr.oninput = ()=> inst.setSkin(+xr.value/100);
+    } else {
+      let markers = '';
+      for (const snd of window.SOUNDS){ if (snd.cat!==auscCat) continue;
+        for (const p of snd.points){
+          markers += `<button class="ausc-pt" data-sound="${snd.id}" data-p="${esc(p.l)}" style="left:${p.x}%;top:${p.y}%" title="${esc(p.l)}" aria-label="${esc(p.l)}"></button>`; } }
+      $('#ausc-svg').innerHTML = `<div class="body-photo ausc-photo"><img src="img/body_blue.jpg" alt="" draggable="false">${markers}</div>`;
+      $('#ausc-svg').querySelectorAll('.ausc-pt').forEach(el=>{
+        el.onclick = ()=>{ const snd = window.SOUNDS.find(s=>s.id===el.dataset.sound); if (snd) pickSound(snd, el.dataset.p); };
+      });
+    }
 };
 
 /* ---------- ECG ---------- */
@@ -1206,9 +1233,8 @@ ROUTES.patient.after = function(){
       <div id="pt-verdict"></div>
     </div>`;
     $('#pt-sound').onclick = ()=>Ausc.play(window.SOUNDS.find(s=>s.id===c.sound).synth);
-    $('#pt-map').innerHTML = BodyMap.html('male');
-    const pmap = $('#pt-map .body-photo');
-    pmap.querySelectorAll('.zone-dot').forEach(z=>{ if (z.dataset.zone!==c.pain) z.remove(); else z.classList.add('sel'); });
+    $('#pt-map').innerHTML = BodyMap.html('male', c.pain);
+    BodyMap.bind($('#pt-map'), ()=>{});
     pmap.classList.add('mini');
     ECGRen.start($('#pt-ecg'), window.ECGS.find(e=>e.id===c.ecg), S.theme, 0.8);
     $('#pt-check').onclick = ()=>{

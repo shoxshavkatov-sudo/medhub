@@ -434,3 +434,15 @@ dialog::backdrop{animation:fadeBk .25s ease}
 #ai-keyline input{flex:1}
 #ai-panel .chiprow .chip{font-size:.72rem;padding:5px 9px}
 @media (max-width:640px){ #ai-panel{top:54px;right:8px} }
+
+/* ---------- 3D-тело в симуляторах ---------- */
+.body3d-box{position:relative}
+.body3d{height:540px;border-radius:18px;overflow:hidden;position:relative;touch-action:none;
+  background:radial-gradient(120% 90% at 50% 20%, #eef4fd 0%, #d9e6f7 60%, #c9d9ef 100%)}
+[data-theme="dark"] .body3d{background:radial-gradient(120% 90% at 50% 20%, #1b2434 0%, #141b29 60%, #0f1521 100%)}
+[data-theme="night"] .body3d{background:radial-gradient(120% 90% at 50% 20%, #1c1209 0%, #140d06 60%, #0d0804 100%)}
+.body3d canvas{display:block}
+.body3d-bar{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:8px 4px 0}
+.body3d-hint{font-size:.78rem;color:var(--muted)}
+.xray-lbl{display:inline-flex;gap:8px;align-items:center;font-size:.78rem;color:var(--muted)}
+.xray-range{width:130px;accent-color:var(--accent)}
