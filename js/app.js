@@ -1110,20 +1110,49 @@ const Ref = (function(){
     return out + esc(text.slice(pos));
   }
   const L = o => (o && (o[S.lang] || o.ru)) || '';
-  /* groups: [{key, tag, title, range, items}] ; opt: {hay(item), row(item, tt, open), openUpTo} */
+  /* фрагмент текста вокруг первого совпадения — показывается под строкой, если нашлось в содержимом */
+  function snip(fields, tt){
+    const out = [];
+    for (const [label, text0] of fields){
+      const text = String(text0 || ''); if (!text) continue;
+      const low = norm(text); let pos = -1;
+      for (const x of tt){ const i = low.indexOf(x); if (i !== -1 && (pos === -1 || i < pos)) pos = i; }
+      if (pos === -1) continue;
+      let a = Math.max(0, pos - 55), b = Math.min(text.length, pos + 125);
+      if (a > 0){ const sp = text.indexOf(' ', a); if (sp !== -1 && sp < pos) a = sp + 1; }
+      if (b < text.length){ const sp = text.lastIndexOf(' ', b); if (sp > pos) b = sp; }
+      out.push(`<span class="ref-snip"><b>${esc(label)}:</b> ${a > 0 ? '…' : ''}${mark(text.slice(a, b), tt)}${b < text.length ? '…' : ''}</span>`);
+      if (out.length >= 2) break;
+    }
+    return out.join('');
+  }
+  /* groups: [{key, tag, title, range, items}]
+     opt: {hay(item) — название/код, fields(item) — [[подпись, текст]] содержимое карточки,
+           row(item, tt, open, snipHtml), openUpTo — сколько найденных раскрыть целиком}
+     Порядок в группе: сначала совпадения в названии, потом — в содержимом (с фрагментом). */
   function render(box, groups, q, opt){
     const tt = terms(q);
-    let shown = groups.map(g => ({g, items: !tt.length ? g.items
-      : has(g.title, tt) ? g.items
-      : g.items.filter(it => has(opt.hay(it), tt))})).filter(x => x.items.length);
+    const fields = it => opt.fields ? opt.fields(it) : [];
+    let inText = 0;
+    const shown = groups.map(g => {
+      if (!tt.length || has(g.title, tt)) return {g, items: g.items.map(it => [it, ''])};
+      const byName = [], byText = [];
+      for (const it of g.items){
+        if (has(opt.hay(it), tt)) byName.push([it, '']);
+        else if (opt.fields){ const f = fields(it);
+          if (has(opt.hay(it) + ' ' + f.map(x => x[1] || '').join(' '), tt)) byText.push([it, snip(f, tt)]); }
+      }
+      inText += byText.length;
+      return {g, items: byName.concat(byText)};
+    }).filter(x => x.items.length);
     const total = shown.reduce((n, x) => n + x.items.length, 0);
     if (!shown.length){ box.innerHTML = `<div class="empty">${t('ref_none')}</div>`; return; }
     const openItems = tt.length && total <= (opt.openUpTo || 0);
-    box.innerHTML = (tt.length ? `<div class="ref-found muted">${t('ref_found')}: <b>${total}</b></div>` : '') +
+    box.innerHTML = (tt.length ? `<div class="ref-found muted">${t('ref_found')}: <b>${total}</b>${inText ? ` · ${t('ref_in_text')}: ${inText}` : ''}</div>` : '') +
       shown.map(({g, items}) => `<details class="ref-grp" data-g="${esc(g.key)}"${tt.length ? ' open' : ''}>
         <summary>${g.tag ? `<span class="ref-gt">${esc(g.tag)}</span>` : ''}<span class="ref-gn">${mark(g.title, tt)}</span>
           ${g.range ? `<span class="ref-gr">${esc(g.range)}</span>` : ''}<span class="ref-gc">${items.length}</span></summary>
-        <div class="ref-items">${items.map(it => opt.row(it, tt, openItems)).join('')}</div></details>`).join('');
+        <div class="ref-items">${items.map(([it, sn]) => opt.row(it, tt, openItems, sn)).join('')}</div></details>`).join('');
   }
   /* поле поиска: ввод с задержкой, Esc очищает */
   function bind(input, draw){
@@ -1182,11 +1211,51 @@ ROUTES.icd = function(arg){
 };
 ROUTES.icd.after = function(){
   const groups = icdGroups(), input = $('#icd-q'), box = $('#icd-list');
-  Ref.bind(input, () => Ref.render(box, groups, input.value, {
+  let tt = [];
+  const fill = () => box.querySelectorAll('details.ref-icd[open] > .ref-body:empty').forEach(b => { b.innerHTML = IcdInfo.html(b.dataset.c, b.dataset.n, tt); });
+  const draw = () => { tt = Ref.terms(input.value); Ref.render(box, groups, input.value, {
+    openUpTo: 3,
     hay: r => r.c + ' ' + r.ru + ' ' + r.en,
-    row: (r, tt) => `<div class="ref-row"><b>${Ref.mark(r.c, tt)}</b><span>${Ref.mark(r.ru, tt)}</span><span class="en muted">${Ref.mark(r.en, tt)}</span></div>`
-  }));
+    fields: r => IcdInfo.fields(r.c),
+    row: (r, tt, open, sn) => `<details class="ref-item ref-icd"${open ? ' open' : ''}>
+      <summary class="ref-row"><b>${Ref.mark(r.c, tt)}</b><span>${Ref.mark(r.ru, tt)}</span><span class="en muted">${Ref.mark(r.en, tt)}</span>${sn || ''}</summary>
+      <div class="ref-body" data-c="${esc(r.c)}" data-n="${esc(r.ru)}"></div></details>`
+  }); fill(); };
+  /* справка грузится один раз при открытии раздела; когда пришла — поиск повторяется уже по содержимому */
+  box.addEventListener('toggle', e => { if (e.target.matches && e.target.matches('details.ref-icd') && e.target.open) fill(); }, true);
+  Ref.bind(input, draw);
+  if (!window.ICD_INFO) IcdInfo.load().then(draw);
 };
+
+/* ---------- краткая справка по кодам МКБ (js/icd-info.js, грузится по требованию) ---------- */
+const IcdInfo = (function(){
+  let p = null;
+  function load(){
+    if (window.ICD_INFO) return Promise.resolve();
+    if (!p) p = new Promise(res => { const s = document.createElement('script');
+      s.src = 'js/icd-info.js?v=' + ICD_INFO_V; s.onload = s.onerror = () => res(); document.head.appendChild(s); });
+    return p;
+  }
+  const LBL = ['icd_i_what', 'icd_i_sym', 'icd_i_dx', 'icd_i_tx'];
+  /* [[подпись, текст]] — для поиска и карточки */
+  function fields(code){
+    const raw = window.ICD_INFO && window.ICD_INFO[String(code || '')];
+    return raw ? String(raw).split('|').map((x, i) => [t(LBL[i] || 'icd_i_tx'), x.trim()]).filter(f => f[1]) : [];
+  }
+  function html(code, name, tt){
+    const key = String(code || '');
+    const first = key.split(/[-–]/)[0];                         // «Z86-Z87» → Z86
+    const who = 'https://icd.who.int/browse10/2019/en#/' + encodeURIComponent(first);
+    const wiki = 'https://ru.wikipedia.org/w/index.php?search=' + encodeURIComponent(String(name || '').replace(/\s*\(.*?\)\s*/g, ' ').trim());
+    const links = `<p class="icd-links">${ic('link')} ${t('icd_i_more')}: <a href="${wiki}" target="_blank" rel="noopener">Википедия ↗</a> · <a href="${who}" target="_blank" rel="noopener">ВОЗ МКБ-10 ↗</a></p>`;
+    if (!window.ICD_INFO) return `<p class="muted">${t('loading')}</p>`;
+    const f = fields(key);
+    if (!f.length) return `<p class="muted">${t('icd_i_none')}</p>` + links;
+    return f.map(([l, x]) => `<p><b>${esc(l)}:</b> ${Ref.mark(x, tt)}</p>`).join('') + links;
+  }
+  return {load, html, fields};
+})();
+const ICD_INFO_V = '20261111b';
 
 /* ---------- DRUGS ---------- */
 /* классы в данных очень дробные (75 на 78 препаратов) — сводим в фармгруппы.
@@ -1226,17 +1295,23 @@ ROUTES.drugs = function(arg){
 };
 ROUTES.drugs.after = function(){
   const groups = drugGroups(), input = $('#dr-q'), box = $('#dr-list');
+  const X = window.DRUG_EXTRA || {};
+  const fields = d => [[t('d_ind'), d.ind], [t('d_mech'), (X[d.n] || [])[0]], [t('d_dose'), d.dose], [t('d_contra'), d.contr],
+    [t('d_se'), (X[d.n] || [])[1]], [t('d_inter'), d.inter], [t('d_preg'), d.preg]];
   Ref.bind(input, () => Ref.render(box, groups, input.value, {
     openUpTo: 3,
-    hay: d => d.n + ' ' + (d.lat || '') + ' ' + d.cl + ' ' + d.ind,
-    row: (d, tt, open) => `<details class="ref-item"${open ? ' open' : ''}>
-      <summary><b>${Ref.mark(d.n, tt)}</b>${S.latin && d.lat ? `<span class="muted"><i>${Ref.mark(d.lat, tt)}</i></span>` : ''}<span class="ref-cl">${Ref.mark(d.cl, tt)}</span></summary>
+    hay: d => d.n + ' ' + (d.lat || '') + ' ' + d.cl,
+    fields,
+    row: (d, tt, open, sn) => `<details class="ref-item"${open ? ' open' : ''}>
+      <summary><b>${Ref.mark(d.n, tt)}</b>${S.latin && d.lat ? `<span class="muted"><i>${Ref.mark(d.lat, tt)}</i></span>` : ''}<span class="ref-cl">${Ref.mark(d.cl, tt)}</span>${sn || ''}</summary>
       <div class="ref-body">
+        ${X[d.n] ? `<p><b>${t('d_mech')}:</b> ${Ref.mark(X[d.n][0], tt)}</p>` : ''}
         <p><b>${t('d_ind')}:</b> ${Ref.mark(d.ind, tt)}</p>
-        <p><b>${t('d_dose')}:</b> ${esc(d.dose)}</p>
-        <p style="color:var(--danger)"><b>${t('d_contra')}:</b> ${esc(d.contr)}</p>
-        <p class="muted"><b>${t('d_inter')}:</b> ${esc(d.inter)}</p>
-        <p class="muted"><b>${t('d_preg')}:</b> ${esc(d.preg)}</p>
+        <p><b>${t('d_dose')}:</b> ${Ref.mark(d.dose, tt)}</p>
+        <p style="color:var(--danger)"><b>${t('d_contra')}:</b> ${Ref.mark(d.contr, tt)}</p>
+        ${X[d.n] ? `<p><b>${t('d_se')}:</b> ${Ref.mark(X[d.n][1], tt)}</p>` : ''}
+        <p class="muted"><b>${t('d_inter')}:</b> ${Ref.mark(d.inter, tt)}</p>
+        <p class="muted"><b>${t('d_preg')}:</b> ${Ref.mark(d.preg, tt)}</p>
       </div></details>`
   }));
 };
@@ -1286,15 +1361,21 @@ ROUTES.protocols = function(arg){
 };
 ROUTES.protocols.after = function(){
   const groups = protocolGroups(), input = $('#pr-q'), box = $('#pr-list');
+  const X = window.PROTOCOL_EXTRA || {};
+  const fields = p => [[t('p_signs'), (X[p.t] || [])[0]], [t('p_diff'), p.diff.join('; ')], [t('p_steps'), p.steps.join(' • ')],
+    [t('p_redflags'), p.red], [t('p_next'), (X[p.t] || [])[1]]];
   Ref.bind(input, () => Ref.render(box, groups, input.value, {
     openUpTo: 2,
-    hay: p => [p.t, p.cat, p.red].concat(p.diff, p.steps).join(' '),
-    row: (p, tt, open) => `<details class="ref-item"${open ? ' open' : ''}>
-      <summary><b>${Ref.mark(p.t, tt)}</b></summary>
+    hay: p => p.t + ' ' + p.cat,
+    fields,
+    row: (p, tt, open, sn) => `<details class="ref-item"${open ? ' open' : ''}>
+      <summary><b>${Ref.mark(p.t, tt)}</b>${sn || ''}</summary>
       <div class="ref-body">
+        ${X[p.t] ? `<h4>${t('p_signs')}</h4><p>${Ref.mark(X[p.t][0], tt)}</p>` : ''}
         <h4>${t('p_diff')}</h4><ul class="steps">${p.diff.map(x => `<li>${Ref.mark(x, tt)}</li>`).join('')}</ul>
         <h4>${t('p_steps')}</h4><ol class="steps">${p.steps.map(x => `<li>${Ref.mark(x, tt)}</li>`).join('')}</ol>
         <p style="color:var(--danger)"><b>${t('p_redflags')}:</b> ${Ref.mark(p.red, tt)}</p>
+        ${X[p.t] ? `<h4>${t('p_next')}</h4><p>${Ref.mark(X[p.t][1], tt)}</p>` : ''}
       </div></details>`
   }));
 };
