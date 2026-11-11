@@ -4,3 +4,4 @@ data.json
 .DS_Store
 data.json.bak
 ai_key.txt
+dist/

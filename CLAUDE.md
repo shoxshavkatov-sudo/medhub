@@ -10,16 +10,22 @@
 1. Работай в ветке `claude/<тема>` от свежего `origin/main`.
 2. Проверь локально (см. «Проверка» ниже), закоммить.
 3. Push ветки → Pull Request в `main` → **сразу смержи** (REST: `gh api -X PUT repos/shoxshavkatov-sudo/medhub/pulls/<n>/merge -f merge_method=merge`; GraphQL `gh pr create` в облачных сессиях недоступен — PR создавай через `gh api repos/.../pulls`).
-4. Render сам пересобирает сайт из `main` (~1 мин). Проверь, что на проде новая версия: `curl -s https://medhub-g6dl.onrender.com/ | grep -o 'app.js?v=[0-9a-z]*'`.
+4. Render сам пересобирает сайт из `main` (~1 мин). Проверь, что на проде новая сборка: `curl -s https://medhub-g6dl.onrender.com/ | grep -o 'r/[0-9]*/js/app.js'` — номер должен смениться.
 5. Сообщи владельцу, что изменение на сайте.
 
 Не мержь то, что не проверено. Если что-то сломано — сначала почини, потом мерж.
 
-## Кэш: всегда поднимай версии
+## Кэш: почему build.sh, а не только ?v=
 
-На Render `/js/*` и `/css/*` кэшируются на 10 минут. При изменении файла обнови его `?v=…` в `index.html`
-(формат `ГГГГММДД` + буква, например `20261111c`). `index.html` не кэшируется.
-Исключения: `js/news.js` грузится с `?t=Date.now()`, `js/icd-info.js` — с `ICD_INFO_V` в `js/app.js` (подними его при правке справки МКБ).
+CDN Render (Cloudflare) кэширует файлы до часа и **не различает `?v=` в адресе** — после деплоя
+изменённый `app.js` мог отдаваться старым. Поэтому сборка идёт через `build.sh` (`buildCommand` в `render.yaml`):
+каждый деплой кладёт `js/` и `css/` в новую папку `r/<время сборки>/`, и `index.html` ссылается на неё.
+`news.js` и `icd-info.js` грузятся из той же папки (`ASSET_BASE` в начале `js/app.js`).
+
+- Ничего специально делать не нужно: любой деплой получает новые адреса.
+- `?v=…` в `index.html` можно оставлять — не мешает, помогает браузерному кэшу при локальном запуске.
+- Не меняй `buildCommand` и не удаляй `build.sh`. Новую папку с ресурсами, которые часто меняются, добавь в `build.sh`.
+- Картинки (`img/`) кэшируются на 7 дней: при замене картинки давай файлу **новое имя**.
 
 ## Структура
 
@@ -48,7 +54,7 @@
 Собери копию как Render и открой в Playwright (Chromium уже установлен):
 
 ```bash
-mkdir -p /tmp/site && cp -R index.html js css img vendor models /tmp/site/ && cd /tmp/site && python3 -m http.server 8765
+mkdir -p /tmp/site && cp -R index.html js css img vendor models build.sh /tmp/site/ && cd /tmp/site && bash build.sh && cd dist && python3 -m http.server 8765
 ```
 
 Минимум: стартовая страница без `pageerror`, изменённый раздел на 1280px и 360–375px, светлая и тёмная тема,
