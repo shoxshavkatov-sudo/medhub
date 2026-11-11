@@ -1026,6 +1026,7 @@ ROUTES.search.after = function(q){
   $('#s-go').onclick = run;
   $('#s-in').addEventListener('keydown', e=>{ if(e.key==='Enter') run(); });
   if (q) run();
+  if (!RefData.ready()) RefData.load().then(() => { if ($('#s-in') && $('#s-in').value.trim()) run(); });
   function run(){
     const q = $('#s-in').value.trim(); const box = $('#s-results');
     if (!q){ box.innerHTML=''; return; }
@@ -1055,7 +1056,7 @@ ROUTES.search.after = function(q){
         res.push({where:t('nav_drugs'), title:d.n, sub:d.ind, route:'drugs', arg:d.n});
       for (const l of window.LABS) if ((l.a+' '+(l.m||'')+(l.f||'')).toLowerCase().includes(ql))
         res.push({where:t('nav_labs'), title:l.a, sub:`${l.m||''} ${l.f&&l.f!==l.m?'| '+l.f:''}`, route:'labs'});
-      for (const p of window.PROTOCOLS) if ((p.t+' '+p.cat).toLowerCase().includes(ql))
+      for (const p of allProtocols()) if ((p.t+' '+p.cat+' '+(p.uz&&p.uz.t||'')).toLowerCase().includes(ql))
         res.push({where:t('nav_protocols'), title:p.t, sub:p.cat, route:'protocols', arg:p.t});
       for (const c of window.CALCS) if (c.n.toLowerCase().includes(ql))
         res.push({where:t('nav_calc'), title:c.n, sub:'', route:'calcs'});
@@ -1349,39 +1350,72 @@ ROUTES.labs.after = function(){
   draw();
 };
 
-/* ---------- PROTOCOLS ---------- */
-function protocolGroups(){
-  const groups = [];
-  for (const p of window.PROTOCOLS){
-    let g = groups.find(x => x.title === p.cat);
-    if (!g){ g = {key:'p' + groups.length, title:p.cat, items:[]}; groups.push(g); }
-    g.items.push(p);
+/* ---------- данные справочника, которые грузятся по требованию (протоколы и др.) ---------- */
+const REF_DATA_V = '20261112a';
+const RefData = (function(){
+  const files = ['js/protocols-more.js'];
+  let p = null;
+  function load(){
+    if (!p) p = Promise.all(files.map(f => new Promise(res => { const s = document.createElement('script');
+      s.src = ASSET_BASE + f + '?v=' + REF_DATA_V; s.onload = s.onerror = () => res(); document.head.appendChild(s); })));
+    return p;
   }
-  return groups;
+  const ready = () => !!window.PROTOCOLS_MORE;
+  return {load, ready};
+})();
+
+/* ---------- PROTOCOLS ---------- */
+/* порядок и названия разделов: [ru (ключ в данных), uz, en] */
+const PROTO_CATS = [
+ ['Реанимация','Reanimatsiya','Resuscitation'], ['Неотложная помощь','Shoshilinch yordam','Emergency care'],
+ ['Кардиология','Kardiologiya','Cardiology'], ['Пульмонология','Pulmonologiya','Pulmonology'],
+ ['Неврология','Nevrologiya','Neurology'], ['Эндокринология','Endokrinologiya','Endocrinology'],
+ ['Хирургия','Jarrohlik','Surgery'], ['Травматология','Travmatologiya','Trauma'],
+ ['Акушерство и гинекология','Akusherlik va ginekologiya','Obstetrics & gynecology'], ['Педиатрия','Pediatriya','Pediatrics'],
+ ['Токсикология','Toksikologiya','Toxicology'], ['Инфекционные болезни','Yuqumli kasalliklar','Infectious diseases'],
+ ['Урология и нефрология','Urologiya va nefrologiya','Urology & nephrology'], ['Гастроэнтерология','Gastroenterologiya','Gastroenterology'],
+ ['ЛОР и офтальмология','LOR va oftalmologiya','ENT & ophthalmology'], ['Психиатрия','Psixiatriya','Psychiatry']
+];
+const protoCatTitle = cat => { const c = PROTO_CATS.find(x => x[0] === cat); return c ? (S.lang === 'uz' ? c[1] : S.lang === 'en' ? c[2] : c[0]) : cat; };
+const allProtocols = () => (window.PROTOCOLS || []).concat(window.PROTOCOLS_MORE || []);
+/* единый вид протокола на текущем языке: поля sign/next — в объекте или в PROTOCOL_EXTRA; узбекский — p.uz или PROTOCOL_UZ */
+function protoView(p){
+  const X = (window.PROTOCOL_EXTRA || {})[p.t] || [];
+  const v = {ruT: p.t, t: p.t, cat: p.cat, diff: p.diff || [], steps: p.steps || [], red: p.red || '', sign: p.sign || X[0] || '', next: p.next || X[1] || ''};
+  const u = S.lang === 'uz' ? (p.uz || (window.PROTOCOL_UZ || {})[p.t]) : null;
+  if (u) for (const k of ['t', 'diff', 'steps', 'red', 'sign', 'next']) if (u[k] && u[k].length) v[k] = u[k];
+  return v;
+}
+function protocolGroups(){
+  const by = new Map();
+  for (const p of allProtocols()){ if (!by.has(p.cat)) by.set(p.cat, []); by.get(p.cat).push(protoView(p)); }
+  const order = PROTO_CATS.map(c => c[0]);
+  const pos = c => { const i = order.indexOf(c); return i < 0 ? 99 : i; };
+  return [...by.keys()].sort((a, b) => pos(a) - pos(b)).map((cat, i) => ({key:'p' + i, title:protoCatTitle(cat), items:by.get(cat)}));
 }
 ROUTES.protocols = function(arg){
   return head(t('nav_protocols'), t('protocols_hint')) + Ref.searchBox('pr-q', t('ref_ph_protocols'), arg) + `
   <div id="pr-list" class="ref-list"></div>`;
 };
 ROUTES.protocols.after = function(){
-  const groups = protocolGroups(), input = $('#pr-q'), box = $('#pr-list');
-  const X = window.PROTOCOL_EXTRA || {};
-  const fields = p => [[t('p_signs'), (X[p.t] || [])[0]], [t('p_diff'), p.diff.join('; ')], [t('p_steps'), p.steps.join(' • ')],
-    [t('p_redflags'), p.red], [t('p_next'), (X[p.t] || [])[1]]];
-  Ref.bind(input, () => Ref.render(box, groups, input.value, {
+  const input = $('#pr-q'), box = $('#pr-list');
+  const draw = () => Ref.render(box, protocolGroups(), input.value, {
     openUpTo: 2,
-    hay: p => p.t + ' ' + p.cat,
-    fields,
-    row: (p, tt, open, sn) => `<details class="ref-item"${open ? ' open' : ''}>
-      <summary><b>${Ref.mark(p.t, tt)}</b>${sn || ''}</summary>
+    hay: v => v.t + ' ' + (v.ruT || '') + ' ' + v.cat,
+    fields: v => [[t('p_signs'), v.sign], [t('p_diff'), v.diff.join('; ')], [t('p_steps'), v.steps.join(' • ')],
+      [t('p_redflags'), v.red], [t('p_next'), v.next]],
+    row: (v, tt, open, sn) => `<details class="ref-item"${open ? ' open' : ''}>
+      <summary><b>${Ref.mark(v.t, tt)}</b>${sn || ''}</summary>
       <div class="ref-body">
-        ${X[p.t] ? `<h4>${t('p_signs')}</h4><p>${Ref.mark(X[p.t][0], tt)}</p>` : ''}
-        <h4>${t('p_diff')}</h4><ul class="steps">${p.diff.map(x => `<li>${Ref.mark(x, tt)}</li>`).join('')}</ul>
-        <h4>${t('p_steps')}</h4><ol class="steps">${p.steps.map(x => `<li>${Ref.mark(x, tt)}</li>`).join('')}</ol>
-        <p style="color:var(--danger)"><b>${t('p_redflags')}:</b> ${Ref.mark(p.red, tt)}</p>
-        ${X[p.t] ? `<h4>${t('p_next')}</h4><p>${Ref.mark(X[p.t][1], tt)}</p>` : ''}
+        ${v.sign ? `<h4>${t('p_signs')}</h4><p>${Ref.mark(v.sign, tt)}</p>` : ''}
+        ${v.diff.length ? `<h4>${t('p_diff')}</h4><ul class="steps">${v.diff.map(x => `<li>${Ref.mark(x, tt)}</li>`).join('')}</ul>` : ''}
+        <h4>${t('p_steps')}</h4><ol class="steps">${v.steps.map(x => `<li>${Ref.mark(x, tt)}</li>`).join('')}</ol>
+        ${v.red ? `<p style="color:var(--danger)"><b>${t('p_redflags')}:</b> ${Ref.mark(v.red, tt)}</p>` : ''}
+        ${v.next ? `<h4>${t('p_next')}</h4><p>${Ref.mark(v.next, tt)}</p>` : ''}
       </div></details>`
-  }));
+  });
+  Ref.bind(input, draw);
+  if (!RefData.ready()) RefData.load().then(draw);
 };
 
 /* ---------- CALCULATORS ---------- */
