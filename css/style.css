@@ -472,3 +472,46 @@ html{scroll-behavior:smooth}
   #global-search{padding:8px 9px}
   #search-go{padding:7px 9px}
 }
+
+/* ---------- Справка: компактные группы + поиск (МКБ, фармакология, протоколы) ---------- */
+.ref-search{display:flex;align-items:center;gap:10px;padding:8px 14px;transition:border-color .2s}
+.ref-search:focus-within{border-color:var(--accent)}
+.ref-search .ic{width:18px;height:18px;color:var(--muted)}
+.ref-search input{border:0;background:transparent;padding:8px 0;font-size:.95rem;outline:none}
+.ref-found{font-size:.82rem;margin:0 4px 8px}
+.ref-list{margin-bottom:14px}
+.ref-grp{background:var(--panel);border:1px solid var(--line);border-radius:12px;margin-bottom:8px;overflow:hidden}
+.ref-grp>summary{list-style:none;display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;font-weight:600;font-size:.93rem;user-select:none}
+.ref-grp>summary::-webkit-details-marker,.ref-item>summary::-webkit-details-marker{display:none}
+.ref-grp>summary::after{content:'';flex:none;width:7px;height:7px;margin:0 3px 3px 2px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);
+  transform:rotate(45deg);transition:transform .2s}
+.ref-grp[open]>summary::after{transform:rotate(-135deg);margin-bottom:-3px}
+.ref-grp>summary:hover{background:color-mix(in srgb,var(--panel2) 60%,transparent)}
+.ref-gt{flex:none;min-width:36px;padding:2px 6px;border-radius:7px;text-align:center;font-size:.72rem;font-weight:800;
+  color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.ref-gn{flex:1;min-width:0}
+.ref-gr{flex:none;font-size:.76rem;font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums}
+.ref-gc{flex:none;min-width:26px;padding:1px 8px;border-radius:99px;text-align:center;font-size:.74rem;font-weight:700;color:var(--muted);background:var(--panel2)}
+.ref-items{border-top:1px solid var(--line);padding:4px 6px 6px}
+.ref-row{display:grid;grid-template-columns:56px 1fr 1fr;gap:10px;padding:6px 8px;border-radius:8px;font-size:.87rem;line-height:1.35}
+.ref-row:nth-child(even){background:color-mix(in srgb,var(--panel2) 55%,transparent)}
+.ref-row b{font-variant-numeric:tabular-nums}
+.ref-item{border-radius:9px}
+.ref-item+.ref-item{margin-top:2px}
+.ref-item>summary{list-style:none;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;padding:8px 10px;border-radius:9px;cursor:pointer;font-size:.9rem}
+.ref-item>summary::before{content:'›';flex:none;width:10px;color:var(--muted);font-weight:700;transition:transform .2s;display:inline-block}
+.ref-item[open]>summary::before{transform:rotate(90deg)}
+.ref-item>summary:hover,.ref-item[open]>summary{background:var(--panel2)}
+.ref-cl{font-size:.78rem;color:var(--muted)}
+.ref-body{padding:4px 12px 10px 30px;font-size:.87rem;line-height:1.5}
+.ref-body p{margin:.35em 0}
+.ref-body h4{margin:.7em 0 .2em;font-size:.82rem;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+.ref-body .steps{margin:.2em 0;padding-left:1.2em}
+.ref-extra{margin-bottom:14px}
+mark{background:color-mix(in srgb,var(--warn) 38%,transparent);color:inherit;border-radius:3px;padding:0 1px}
+@media (max-width:640px){
+  .ref-row{grid-template-columns:50px 1fr;gap:2px 8px}
+  .ref-row .en{grid-column:2;font-size:.78rem}
+  .ref-gr{display:none}
+  .ref-body{padding-left:14px}
+}
