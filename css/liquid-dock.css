@@ -1,0 +1,71 @@
+/* =====================================================================
+   MedHub — нижняя панель «Liquid Glass» (см. js/liquid-dock.js).
+   Основано на «Liquid Glass для Telegram Mini Apps» © 2026 Volodymyr (@vovnx).
+   Размеры — в условных единицах --u (бар 190u в высоту, капля 165u), как в наборе;
+   ширины (--tw вкладка, --thw капля, --pad, --bw бар) считает JS под число вкладок.
+   ===================================================================== */
+#dock.ld-dock{position:fixed;z-index:60;left:0;right:0;bottom:calc(env(safe-area-inset-bottom,0px) + 12px);
+  display:flex;justify-content:center;pointer-events:none;
+  /* светлая тема */
+  --ld-matte:rgba(255,255,255,.6); --ld-lens:#eef1f8; --ld-lens-in:rgba(29,36,51,.2);
+  --ld-solid:color-mix(in srgb,var(--accent) 14%,transparent); --ld-text:#4f5a6e; --ld-on:var(--accent);
+  --ld-edge:rgba(29,36,51,.09); --ld-rim:.9; --ld-sh:.16;
+  --ld-glass-bg:rgba(255,255,255,.12); --ld-glass-bd:rgba(255,255,255,.8); --ld-glass-glow:rgba(255,255,255,.75)}
+[data-theme="dark"] #dock.ld-dock{
+  --ld-matte:rgba(40,48,66,.64); --ld-lens:#232c3f; --ld-lens-in:rgba(0,0,0,.6);
+  --ld-solid:rgba(255,255,255,.13); --ld-text:#c4ccdc; --ld-edge:rgba(255,255,255,.04); --ld-rim:1; --ld-sh:.32;
+  --ld-glass-bg:rgba(255,255,255,.06); --ld-glass-bd:rgba(255,255,255,.25); --ld-glass-glow:rgba(255,255,255,.45)}
+[data-theme="night"] #dock.ld-dock{
+  --ld-matte:rgba(48,31,16,.68); --ld-lens:#24180d; --ld-lens-in:rgba(0,0,0,.6);
+  --ld-solid:rgba(255,186,120,.14); --ld-text:#d8c19e; --ld-edge:rgba(255,186,120,.06); --ld-rim:.8; --ld-sh:.38;
+  --ld-glass-bg:rgba(255,200,140,.05); --ld-glass-bd:rgba(255,200,140,.28); --ld-glass-glow:rgba(255,200,140,.4)}
+
+.ld-bar{position:relative;width:calc(var(--bw,843)*var(--u,.46px));height:calc(190*var(--u,.46px));
+  touch-action:none;cursor:grab;pointer-events:auto;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+.ld-bar.down{cursor:grabbing}
+.ld-svg{position:absolute;width:0;height:0;overflow:hidden}
+
+/* матовая основа + тонкий светящийся кантик */
+.ld-matte{position:absolute;inset:0;border-radius:999px;background:var(--ld-matte);
+  -webkit-backdrop-filter:blur(8px) saturate(1.8);backdrop-filter:blur(8px) saturate(1.8);
+  box-shadow:inset 0 0 8px rgba(255,255,255,.05),0 0 0 1px var(--ld-edge),0 8px 24px rgba(0,0,0,var(--ld-sh))}
+.ld-matte::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;pointer-events:none;filter:blur(.4px);opacity:var(--ld-rim);
+  background:linear-gradient(90deg,rgba(255,255,255,.03) 0,rgba(255,255,255,.12) 16%,rgba(255,255,255,.2) 36%,rgba(255,255,255,.22) 50%,rgba(255,255,255,.2) 64%,rgba(255,255,255,.12) 84%,rgba(255,255,255,.03) 100%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
+  mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0)}
+/* «слияние» края бара с выступившей каплей: clip-path строит JS каждый кадр */
+.ld-fil{position:absolute;left:calc(-60*var(--u));top:calc(-40*var(--u));width:calc((var(--bw) + 120)*var(--u));height:calc(270*var(--u));
+  pointer-events:none;background:var(--ld-matte);-webkit-backdrop-filter:blur(8px) saturate(1.8);backdrop-filter:blur(8px) saturate(1.8);clip-path:path('M0 0 Z')}
+
+/* капля: в покое — мягкая подложка .ld-solid, в движении — стеклянная линза .ld-thumb */
+.ld-thumb,.ld-solid{position:absolute;top:calc(12*var(--u));
+  left:calc((var(--pad) + (var(--tw) - var(--thw))/2 + var(--x)*var(--tw))*var(--u));
+  width:calc(var(--thw)*var(--u));height:calc(165*var(--u));
+  translate:calc(var(--tx)*var(--u)) 0;scale:var(--sx) var(--sy);pointer-events:none}
+.ld-solid{background:var(--ld-solid);border-radius:999px;opacity:clamp(0,calc(1 - var(--p)*4),1);will-change:transform,opacity;backface-visibility:hidden}
+.ld-glass{border-radius:999px;background:var(--ld-glass-bg);border:1px solid var(--ld-glass-bd)}
+.ld-thumb{box-shadow:inset 0 0 16px -4px var(--ld-glass-glow),
+    0 calc(6px + var(--p)*10px) calc(18px + var(--p)*20px) rgba(0,0,0,calc(var(--ld-sh) + var(--p)*.2));
+  opacity:clamp(0,calc(var(--p)*4),1);overflow:hidden;will-change:transform,opacity;backface-visibility:hidden}
+.ld-bar.none .ld-solid,.ld-bar.none .ld-thumb{opacity:0}
+.ld-lens{position:absolute;inset:0;border-radius:inherit;overflow:hidden;background:var(--ld-lens);
+  box-shadow:inset 0 0 calc(22*var(--u)) calc(3*var(--u)) var(--ld-lens-in)}
+.ld-lens .ld-tabs{inset:auto;
+  left:calc(-1*(var(--pad) + (var(--tw) - var(--thw))/2)*var(--u) - var(--x)*var(--tw)*var(--u) - var(--tx)*var(--u) - 1px);
+  top:calc(-12*var(--u) - 1px);width:calc(var(--bw)*var(--u));height:calc(190*var(--u))}
+
+/* вкладки */
+.ld-tabs{position:absolute;inset:0;display:grid;padding:0 calc(var(--pad)*var(--u));pointer-events:none}
+.ld-tab{all:unset;box-sizing:border-box;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:calc(9*var(--u));font-family:var(--font);font-size:var(--lf,10px);font-weight:700;line-height:1.15;letter-spacing:-.01em;
+  white-space:nowrap;color:var(--ld-text);transition:color .25s;pointer-events:auto;cursor:inherit}
+.ld-ico{display:grid;place-items:center;height:var(--ic,22px)}
+.ld-ico svg{width:var(--ic,22px);height:var(--ic,22px);display:block}
+.ld-tab.on{color:var(--ld-on)}
+.ld-bar>.ld-tabs>.ld-tab.on>*{opacity:clamp(0,calc(1 - var(--p)*4*var(--near,1)),1)}
+.ld-tab:focus-visible{outline:2px solid var(--accent);outline-offset:-4px;border-radius:999px}
+
+/* меню подразделов — над баром */
+#dock-sheet{bottom:calc(var(--dock-h,76px) + env(safe-area-inset-bottom,0px) + 14px)!important}
+@media (max-width:520px){ #dock.ld-dock{bottom:calc(env(safe-area-inset-bottom,0px) + 8px)} }
+@media print{ #dock,#dock-sheet{display:none!important} }

@@ -46,31 +46,8 @@ h2{font-size:1.35rem} h3{font-size:1.05rem}
 .icon-btn{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:9px;
   width:36px;height:36px;font-size:1.05rem;cursor:pointer}
 .icon-btn:hover{background:var(--line)}
-/* ---------- liquid glass dock (bottom bar) ---------- */
-#dock{position:fixed;z-index:60;bottom:max(12px, env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);
-  display:flex;gap:2px;padding:7px 9px;border-radius:27px;
-  background:color-mix(in srgb, var(--panel) 34%, transparent);
-  -webkit-backdrop-filter:blur(30px) saturate(200%);backdrop-filter:blur(30px) saturate(200%);
-  border:1px solid color-mix(in srgb, #ffffff 42%, transparent);
-  box-shadow:0 14px 44px rgba(0,0,0,.32), 0 2px 8px rgba(0,0,0,.18),
-    inset 0 1px 1px rgba(255,255,255,.55), inset 0 -1px 2px rgba(255,255,255,.12);
-  overflow:hidden}
-#dock::before{content:'';position:absolute;inset:0;pointer-events:none;
-  background:linear-gradient(115deg, rgba(255,255,255,.38) 0%, rgba(255,255,255,.06) 28%,
-    transparent 55%, rgba(255,255,255,.16) 100%)}
-[data-theme="dark"] #dock{border-color:rgba(255,255,255,.14)}
-[data-theme="night"] #dock{border-color:rgba(255,170,90,.22)}
-.dock-btn{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;
-  min-width:56px;padding:8px 8px 6px;border:0;background:none;color:var(--muted);
-  border-radius:20px;cursor:pointer;font-family:inherit;transition:.18s}
-.dock-btn svg{width:23px;height:23px;filter:drop-shadow(0 1px 1px rgba(255,255,255,.25))}
-.dock-btn span{font-size:.58rem;font-weight:700;letter-spacing:.02em;white-space:nowrap}
-.dock-btn:hover{color:var(--text);background:color-mix(in srgb, #fff 16%, transparent)}
-.dock-btn.active{color:#fff;
-  background:linear-gradient(150deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #8a5cf6));
-  box-shadow:0 6px 18px color-mix(in srgb, var(--accent) 55%, transparent),
-    inset 0 1px 1px rgba(255,255,255,.55)}
-[data-theme="night"] .dock-btn.active{background:linear-gradient(150deg,#e07b39,#c9552e)}
+/* ---------- нижняя панель: см. css/liquid-dock.css ---------- */
+#dock:not(.ld-dock){position:fixed;z-index:60;bottom:12px;left:50%;transform:translateX(-50%);display:flex;gap:4px;max-width:calc(100vw - 16px);overflow-x:auto}
 #dock-sheet{position:fixed;z-index:59;bottom:96px;left:50%;transform:translateX(-50%);
   display:grid;grid-template-columns:repeat(2,minmax(170px,1fr));gap:6px;padding:10px;border-radius:22px;
   max-width:min(92vw,460px);max-height:56vh;overflow:auto;
@@ -86,9 +63,7 @@ h2{font-size:1.35rem} h3{font-size:1.05rem}
 .dock-item.on{background:var(--accent);color:#fff}
 .dock-item .di{width:7px;height:7px;border-radius:99px;background:currentColor;opacity:.7}
 @media (max-width:520px){
-  .dock-btn{min-width:42px;padding:7px 4px 5px}
-  .dock-btn span{font-size:.48rem}
-  #dock-sheet{grid-template-columns:1fr 1fr;bottom:86px}
+  #dock-sheet{grid-template-columns:1fr 1fr}
 }
 
 /* ---------- cards / generic ---------- */
@@ -295,7 +270,7 @@ html.no-anim *,html.no-anim *::before,html.no-anim *::after{animation:none!impor
 dialog[open]{animation:dlgIn .28s cubic-bezier(.2,.7,.3,1)}
 dialog::backdrop{animation:fadeBk .25s ease}
 @keyframes fadeBk{from{background:transparent}to{background:rgba(0,0,0,.5)}}
-.btn,.chip,.icon-btn,.dock-btn,.dock-item,.seg button,.zone-dot,.ausc-pt,.atlas-item,.skill-row .seg{transition:transform .16s cubic-bezier(.2,.7,.3,1),background .2s ease,box-shadow .2s ease,color .2s ease,border-color .2s ease}
+.btn,.chip,.icon-btn,.dock-item,.seg button,.zone-dot,.ausc-pt,.atlas-item,.skill-row .seg{transition:transform .16s cubic-bezier(.2,.7,.3,1),background .2s ease,box-shadow .2s ease,color .2s ease,border-color .2s ease}
 .btn:hover,.chip:hover{transform:translateY(-1px)}
 .btn:active,.chip:active,.icon-btn:active,.dock-item:active,.seg button:active{transform:scale(.95)}
 .card,.entry,.stat{transition:transform .22s cubic-bezier(.2,.7,.3,1),box-shadow .22s ease}
@@ -400,20 +375,13 @@ dialog::backdrop{animation:fadeBk .25s ease}
 .auth-hero .muted{max-width:420px;margin:0 auto}
 
 /* ---------- живые иконки ---------- */
-.dock-btn svg{transition:transform .25s cubic-bezier(.2,.7,.3,1.35)}
-.dock-btn:hover svg{transform:translateY(-2px) scale(1.16) rotate(-4deg)}
-.dock-btn.active svg{animation:dockPulse 2.6s ease-in-out infinite}
-@keyframes dockPulse{0%,100%{transform:none}50%{transform:translateY(-2px) scale(1.1)}}
 .card h3 svg{transition:transform .3s}
 .card:hover h3 svg{transform:scale(1.18) rotate(6deg)}
 .btn svg{transition:transform .2s}
 .btn:hover svg{transform:translateY(-1px) scale(1.08)}
 @keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
 @media (prefers-reduced-motion: reduce){
-  .dock-btn svg,.card h3 svg,.btn svg,.ai-bot,.auth-hero svg{animation:none!important;transition:none!important}
-}
-@media (max-width:640px){
-  #dock{max-width:calc(100vw - 16px);overflow-x:auto}
+  .card h3 svg,.btn svg,.ai-bot,.auth-hero svg{animation:none!important;transition:none!important}
 }
 
 /* ---------- панель ИИ у поиска ---------- */
@@ -456,7 +424,7 @@ dialog::backdrop{animation:fadeBk .25s ease}
 /* ---------- плавные переходы между разделами ---------- */
 #view.view-in{animation:viewIn .42s cubic-bezier(.2,.7,.3,1)}
 @keyframes viewIn{from{opacity:0;transform:translateY(14px) scale(.995)}to{opacity:1;transform:none}}
-body,.card,#dock,#dock-sheet,.chip,.btn,select,input,textarea,.badge{transition:background-color .35s ease,color .35s ease,border-color .35s ease}
+body,.card,#dock-sheet,.chip,.btn,select,input,textarea,.badge{transition:background-color .35s ease,color .35s ease,border-color .35s ease}
 html{scroll-behavior:smooth}
 /* пульс ЭКГ-сердца в такт комплексам */
 #ecg-hud b{display:inline-block;transition:transform .14s ease}

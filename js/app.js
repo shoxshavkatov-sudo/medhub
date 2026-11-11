@@ -283,19 +283,22 @@ const DOCK = [
 ];
 function buildDock(){
   const dock = $('#dock'); if (!dock) return;
-  const cur = DOCK.find(d=>d.items.some(([r])=>r===currentRoute));
-  dock.innerHTML = DOCK.map(d=>`
-    <button class="dock-btn ${cur&&cur.key===d.key?'active':''}" data-dept="${d.key}" aria-label="${esc(d.lbl[window.LANG]||d.lbl.ru)}">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${DOCK_ICONS[d.icon]}</svg>
-      <span>${esc(d.lbl[window.LANG]||d.lbl.ru)}</span>
-    </button>`).join('');
-  dock.querySelectorAll('.dock-btn').forEach(b=>b.onclick=()=>dockTap(b.dataset.dept));
+  const cur = DOCK.findIndex(d=>d.items.some(([r])=>r===currentRoute));
+  const items = DOCK.map(d=>({label: d.lbl[window.LANG]||d.lbl.ru, icon: DOCK_ICONS[d.icon]}));
+  if (window.LiquidDock) return LiquidDock.render(dock, items, cur, i=>dockTap(DOCK[i].key));
+  /* запасной вариант, если js/liquid-dock.js не загрузился */
+  dock.innerHTML = DOCK.map((d,i)=>`<button class="dock-item ${i===cur?'on':''}" data-dept="${d.key}">${esc(items[i].label)}</button>`).join('');
+  dock.querySelectorAll('[data-dept]').forEach(b=>b.onclick=()=>dockTap(b.dataset.dept));
 }
 function dockTap(key){
   const d = DOCK.find(x=>x.key===key);
   const sheet = $('#dock-sheet');
-  if (!d.items.some(([r])=>r===currentRoute)) go(d.first);
+  const here = d.items.some(([r])=>r===currentRoute);
+  /* повторный тап по открытому разделу закрывает меню подразделов */
+  if (here && sheet && !sheet.classList.contains('hidden') && sheet.dataset.dept===key){ sheet.classList.add('hidden'); return; }
+  if (!here) go(d.first);
   if (sheet){
+    sheet.dataset.dept = key;
     sheet.innerHTML = `<div class="ds-head">${DOCK_ICONS[d.icon] ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${DOCK_ICONS[d.icon]}</svg>`:''}<b>${esc(d.lbl[window.LANG]||d.lbl.ru)}</b></div>` +
       d.items.map(([r,l])=>`
       <button class="dock-item ${r===currentRoute?'on':''}" data-dr="${r}">
