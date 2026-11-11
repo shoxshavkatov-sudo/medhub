@@ -46,31 +46,8 @@ h2{font-size:1.35rem} h3{font-size:1.05rem}
 .icon-btn{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:9px;
   width:36px;height:36px;font-size:1.05rem;cursor:pointer}
 .icon-btn:hover{background:var(--line)}
-/* ---------- liquid glass dock (bottom bar) ---------- */
-#dock{position:fixed;z-index:60;bottom:max(12px, env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);
-  display:flex;gap:2px;padding:7px 9px;border-radius:27px;
-  background:color-mix(in srgb, var(--panel) 34%, transparent);
-  -webkit-backdrop-filter:blur(30px) saturate(200%);backdrop-filter:blur(30px) saturate(200%);
-  border:1px solid color-mix(in srgb, #ffffff 42%, transparent);
-  box-shadow:0 14px 44px rgba(0,0,0,.32), 0 2px 8px rgba(0,0,0,.18),
-    inset 0 1px 1px rgba(255,255,255,.55), inset 0 -1px 2px rgba(255,255,255,.12);
-  overflow:hidden}
-#dock::before{content:'';position:absolute;inset:0;pointer-events:none;
-  background:linear-gradient(115deg, rgba(255,255,255,.38) 0%, rgba(255,255,255,.06) 28%,
-    transparent 55%, rgba(255,255,255,.16) 100%)}
-[data-theme="dark"] #dock{border-color:rgba(255,255,255,.14)}
-[data-theme="night"] #dock{border-color:rgba(255,170,90,.22)}
-.dock-btn{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;
-  min-width:56px;padding:8px 8px 6px;border:0;background:none;color:var(--muted);
-  border-radius:20px;cursor:pointer;font-family:inherit;transition:.18s}
-.dock-btn svg{width:23px;height:23px;filter:drop-shadow(0 1px 1px rgba(255,255,255,.25))}
-.dock-btn span{font-size:.58rem;font-weight:700;letter-spacing:.02em;white-space:nowrap}
-.dock-btn:hover{color:var(--text);background:color-mix(in srgb, #fff 16%, transparent)}
-.dock-btn.active{color:#fff;
-  background:linear-gradient(150deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #8a5cf6));
-  box-shadow:0 6px 18px color-mix(in srgb, var(--accent) 55%, transparent),
-    inset 0 1px 1px rgba(255,255,255,.55)}
-[data-theme="night"] .dock-btn.active{background:linear-gradient(150deg,#e07b39,#c9552e)}
+/* ---------- нижняя панель: см. css/liquid-dock.css ---------- */
+#dock:not(.ld-dock){position:fixed;z-index:60;bottom:12px;left:50%;transform:translateX(-50%);display:flex;gap:4px;max-width:calc(100vw - 16px);overflow-x:auto}
 #dock-sheet{position:fixed;z-index:59;bottom:96px;left:50%;transform:translateX(-50%);
   display:grid;grid-template-columns:repeat(2,minmax(170px,1fr));gap:6px;padding:10px;border-radius:22px;
   max-width:min(92vw,460px);max-height:56vh;overflow:auto;
@@ -86,9 +63,7 @@ h2{font-size:1.35rem} h3{font-size:1.05rem}
 .dock-item.on{background:var(--accent);color:#fff}
 .dock-item .di{width:7px;height:7px;border-radius:99px;background:currentColor;opacity:.7}
 @media (max-width:520px){
-  .dock-btn{min-width:42px;padding:7px 4px 5px}
-  .dock-btn span{font-size:.48rem}
-  #dock-sheet{grid-template-columns:1fr 1fr;bottom:86px}
+  #dock-sheet{grid-template-columns:1fr 1fr}
 }
 
 /* ---------- cards / generic ---------- */
@@ -295,7 +270,7 @@ html.no-anim *,html.no-anim *::before,html.no-anim *::after{animation:none!impor
 dialog[open]{animation:dlgIn .28s cubic-bezier(.2,.7,.3,1)}
 dialog::backdrop{animation:fadeBk .25s ease}
 @keyframes fadeBk{from{background:transparent}to{background:rgba(0,0,0,.5)}}
-.btn,.chip,.icon-btn,.dock-btn,.dock-item,.seg button,.zone-dot,.ausc-pt,.atlas-item,.skill-row .seg{transition:transform .16s cubic-bezier(.2,.7,.3,1),background .2s ease,box-shadow .2s ease,color .2s ease,border-color .2s ease}
+.btn,.chip,.icon-btn,.dock-item,.seg button,.zone-dot,.ausc-pt,.atlas-item,.skill-row .seg{transition:transform .16s cubic-bezier(.2,.7,.3,1),background .2s ease,box-shadow .2s ease,color .2s ease,border-color .2s ease}
 .btn:hover,.chip:hover{transform:translateY(-1px)}
 .btn:active,.chip:active,.icon-btn:active,.dock-item:active,.seg button:active{transform:scale(.95)}
 .card,.entry,.stat{transition:transform .22s cubic-bezier(.2,.7,.3,1),box-shadow .22s ease}
@@ -400,20 +375,13 @@ dialog::backdrop{animation:fadeBk .25s ease}
 .auth-hero .muted{max-width:420px;margin:0 auto}
 
 /* ---------- живые иконки ---------- */
-.dock-btn svg{transition:transform .25s cubic-bezier(.2,.7,.3,1.35)}
-.dock-btn:hover svg{transform:translateY(-2px) scale(1.16) rotate(-4deg)}
-.dock-btn.active svg{animation:dockPulse 2.6s ease-in-out infinite}
-@keyframes dockPulse{0%,100%{transform:none}50%{transform:translateY(-2px) scale(1.1)}}
 .card h3 svg{transition:transform .3s}
 .card:hover h3 svg{transform:scale(1.18) rotate(6deg)}
 .btn svg{transition:transform .2s}
 .btn:hover svg{transform:translateY(-1px) scale(1.08)}
 @keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
 @media (prefers-reduced-motion: reduce){
-  .dock-btn svg,.card h3 svg,.btn svg,.ai-bot,.auth-hero svg{animation:none!important;transition:none!important}
-}
-@media (max-width:640px){
-  #dock{max-width:calc(100vw - 16px);overflow-x:auto}
+  .card h3 svg,.btn svg,.ai-bot,.auth-hero svg{animation:none!important;transition:none!important}
 }
 
 /* ---------- панель ИИ у поиска ---------- */
@@ -456,9 +424,51 @@ dialog::backdrop{animation:fadeBk .25s ease}
 /* ---------- плавные переходы между разделами ---------- */
 #view.view-in{animation:viewIn .42s cubic-bezier(.2,.7,.3,1)}
 @keyframes viewIn{from{opacity:0;transform:translateY(14px) scale(.995)}to{opacity:1;transform:none}}
-body,.card,#dock,#dock-sheet,.chip,.btn,select,input,textarea,.badge{transition:background-color .35s ease,color .35s ease,border-color .35s ease}
+body,.card,#dock-sheet,.chip,.btn,select,input,textarea,.badge{transition:background-color .35s ease,color .35s ease,border-color .35s ease}
 html{scroll-behavior:smooth}
 /* пульс ЭКГ-сердца в такт комплексам */
 #ecg-hud b{display:inline-block;transition:transform .14s ease}
 .ecg-heart.beat{animation:heartPop .18s cubic-bezier(.2,.7,.3,1.4)}
 @keyframes heartPop{0%{transform:scale(1)}45%{transform:scale(1.55)}100%{transform:scale(1)}}
+
+/* ---------- новости ---------- */
+.news-btn{position:relative;display:inline-flex;align-items:center;justify-content:center}
+.news-count{position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 5px;border-radius:99px;
+  background:var(--danger);color:#fff;font-size:.68rem;font-weight:800;line-height:18px;text-align:center;
+  box-shadow:0 0 0 2px var(--panel)}
+.badge .ic,.news-meta .ic{width:14px;height:14px;vertical-align:-2px}
+.badge.news-new{background:color-mix(in srgb,var(--danger) 15%,transparent);color:var(--danger)}
+.news-item{overflow:hidden}
+.news-item.pinned{border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
+.news-item.flash{animation:newsFlash 1.6s ease}
+@keyframes newsFlash{0%,40%{box-shadow:0 0 0 3px var(--accent)}100%{box-shadow:var(--shadow)}}
+.news-img{display:block;width:calc(100% + 36px);margin:-16px -18px 12px;max-height:340px;object-fit:cover;background:var(--panel2)}
+.news-meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center;color:var(--muted);font-size:.8rem;margin-bottom:4px}
+.news-item h3{font-size:1.12rem;margin:.1em 0 .35em}
+.news-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55}
+.news-link{margin:12px 0 0}
+.news-warn{border-color:var(--danger);color:var(--danger)}
+.news-teaser .nt-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.news-teaser .nt-head h3{display:flex;align-items:center;gap:8px;margin:0}
+.news-teaser .nt-head h3 .ic{width:20px;height:20px;color:var(--accent)}
+.nt-all{font-size:.85rem;font-weight:600;text-decoration:none;white-space:nowrap}
+.nt-item{display:flex;flex-direction:column;gap:2px;margin-top:10px;padding:10px 12px;border-radius:10px;
+  background:var(--panel2);color:var(--text);text-decoration:none}
+.nt-item:hover{background:var(--line)}
+.nt-date{font-size:.75rem;color:var(--muted);display:flex;align-items:center;gap:6px}
+.nt-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--danger)}
+.nt-snip{font-size:.85rem;overflow-wrap:anywhere}
+.news-dlg{max-width:620px;max-height:90vh}
+.ne-hint{font-size:.85rem;margin:0 0 4px}
+.ne-lang{margin-top:12px;padding:4px 12px 12px;border:1px solid var(--line);border-radius:10px}
+.ne-lang>b{display:block;margin-top:8px;font-size:.75rem;color:var(--accent);letter-spacing:.05em}
+.ne-pin{display:flex;align-items:center;gap:8px;padding:9px 0;cursor:pointer}
+.ne-code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.8rem;min-height:140px}
+@media (max-width:520px){
+  #topbar{padding:8px 10px;gap:6px}
+  .top-actions{gap:4px}
+  .top-actions .icon-btn{width:32px;height:32px}
+  #lang-select{padding:6px 2px}
+  #global-search{padding:8px 9px}
+  #search-go{padding:7px 9px}
+}

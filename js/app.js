@@ -15,7 +15,7 @@ const DEFAULTS = {lang:'ru', theme:'light', quality:'high', latin:false,
   grades:[], events:[], diary:[], skills:{}, ops:[], reflect:[], duties:[],
   decks:[], cards:[], srs:{}, streak:0, lastReview:'',
   patient:{solved:0, attempted:0}, notif:{duty:true, colloq:true, cards:true},
-  group:null, authSkip:false, groqKey:'', aiChat:[], syncKey:'', basesOffline:false};
+  group:null, authSkip:false, groqKey:'', aiChat:[], syncKey:'', basesOffline:false, newsSeen:[]};
 let S;
 try { S = Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem('medhub')||'{}')); }
 catch { S = Object.assign({}, DEFAULTS); }
@@ -94,7 +94,8 @@ const ICONS = {
  trash:'<path d="M4.5 6.5h15M9.5 6.5V4.2h5v2.3M6.5 6.5l1 14h9l1-14"/><path d="M10 10.5v6M14 10.5v6"/>',
  eye:'<path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.6"/>',
  pill:'<rect x="3.5" y="8.5" width="17" height="7" rx="3.5" transform="rotate(-35 12 12)"/><path d="m9.2 6.7 5.6 10.6"/>',
- link:'<path d="M9.5 14.5 14.5 9.5"/><path d="M7 12 5 14a3.5 3.5 0 0 0 5 5l2-2M17 12l2-2a3.5 3.5 0 0 0-5-5l-2 2"/>'
+ link:'<path d="M9.5 14.5 14.5 9.5"/><path d="M7 12 5 14a3.5 3.5 0 0 0 5 5l2-2M17 12l2-2a3.5 3.5 0 0 0-5-5l-2 2"/>',
+ megaphone:'<path d="M4 9.5h3l7-4.5v14l-7-4.5H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1Z"/><path d="M17.5 9.2a4 4 0 0 1 0 5.6"/><path d="m7.5 14.5 1.6 5h2.3l-1.3-4.3"/>'
 };
 function ic(name, cls=''){
   const p = ICONS[name];
@@ -243,6 +244,8 @@ function applyChrome(){
   $('#lang-select').value = S.lang;
   $('#global-search').placeholder = t('search_placeholder');
   const ab = $('#ai-btn'); if (ab) ab.onclick = ()=>AI.toggle();
+  const nb = $('#news-btn'); if (nb){ nb.onclick = ()=>go('news'); nb.title = t('nav_news'); nb.setAttribute('aria-label', t('nav_news')); }
+  News.badge();
   $('.small-print').textContent = t('disclaimer');
   $('#theme-btn').innerHTML = S.theme==='light'?ic('moon'):S.theme==='dark'?ic('sun'):ic('flame');
   buildDock();
@@ -262,7 +265,7 @@ const DOCK_ICONS = {
 };
 const DOCK = [
  {key:'academy', lbl:{ru:'Учёба', uz:'O‘quv', en:'Study'}, icon:'academy', first:'grades',
-  items:[['grades','nav_grades'],['calendar','nav_calendar'],['materials','nav_materials'],['errors','nav_errors']]},
+  items:[['news','nav_news'],['grades','nav_grades'],['calendar','nav_calendar'],['materials','nav_materials'],['errors','nav_errors']]},
  {key:'search', lbl:{ru:'Поиск', uz:'Qidiruv', en:'Search'}, icon:'search', first:'search',
   items:[['search','nav_search']]},
  {key:'ref', lbl:{ru:'Справка', uz:'Ma’lumot', en:'Ref'}, icon:'ref', first:'icd',
@@ -280,19 +283,22 @@ const DOCK = [
 ];
 function buildDock(){
   const dock = $('#dock'); if (!dock) return;
-  const cur = DOCK.find(d=>d.items.some(([r])=>r===currentRoute));
-  dock.innerHTML = DOCK.map(d=>`
-    <button class="dock-btn ${cur&&cur.key===d.key?'active':''}" data-dept="${d.key}" aria-label="${esc(d.lbl[window.LANG]||d.lbl.ru)}">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${DOCK_ICONS[d.icon]}</svg>
-      <span>${esc(d.lbl[window.LANG]||d.lbl.ru)}</span>
-    </button>`).join('');
-  dock.querySelectorAll('.dock-btn').forEach(b=>b.onclick=()=>dockTap(b.dataset.dept));
+  const cur = DOCK.findIndex(d=>d.items.some(([r])=>r===currentRoute));
+  const items = DOCK.map(d=>({label: d.lbl[window.LANG]||d.lbl.ru, icon: DOCK_ICONS[d.icon]}));
+  if (window.LiquidDock) return LiquidDock.render(dock, items, cur, i=>dockTap(DOCK[i].key));
+  /* запасной вариант, если js/liquid-dock.js не загрузился */
+  dock.innerHTML = DOCK.map((d,i)=>`<button class="dock-item ${i===cur?'on':''}" data-dept="${d.key}">${esc(items[i].label)}</button>`).join('');
+  dock.querySelectorAll('[data-dept]').forEach(b=>b.onclick=()=>dockTap(b.dataset.dept));
 }
 function dockTap(key){
   const d = DOCK.find(x=>x.key===key);
   const sheet = $('#dock-sheet');
-  if (!d.items.some(([r])=>r===currentRoute)) go(d.first);
+  const here = d.items.some(([r])=>r===currentRoute);
+  /* повторный тап по открытому разделу закрывает меню подразделов */
+  if (here && sheet && !sheet.classList.contains('hidden') && sheet.dataset.dept===key){ sheet.classList.add('hidden'); return; }
+  if (!here) go(d.first);
   if (sheet){
+    sheet.dataset.dept = key;
     sheet.innerHTML = `<div class="ds-head">${DOCK_ICONS[d.icon] ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${DOCK_ICONS[d.icon]}</svg>`:''}<b>${esc(d.lbl[window.LANG]||d.lbl.ru)}</b></div>` +
       d.items.map(([r,l])=>`
       <button class="dock-item ${r===currentRoute?'on':''}" data-dr="${r}">
@@ -462,13 +468,213 @@ const ANAT_MODELS = [
 ========================================================= */
 const ROUTES = {};
 
+/* ---------- НОВОСТИ: данные в js/news.js (правится на GitHub, грузится без кэша) ---------- */
+const NEWS_EDIT_URL = 'https://github.com/shoxshavkatov-sudo/medhub/edit/main/js/news.js';
+const NEWS_UPLOAD_URL = 'https://github.com/shoxshavkatov-sudo/medhub/upload/main/img/news';
+const News = (function(){
+  let state = 'loading';                       // loading | ok | error
+  let err = '';
+  /* режим редактора: открыть сайт один раз с ?editor (выключить — ?editor=0) */
+  const editor = (()=>{ try{
+    const p = new URLSearchParams(location.search);
+    if (p.has('editor')){
+      if (p.get('editor')==='0') localStorage.removeItem('medhub_news_editor');
+      else localStorage.setItem('medhub_news_editor','1');
+    }
+    return localStorage.getItem('medhub_news_editor')==='1';
+  }catch(_e){ return false; } })();
+
+  const pick = v => {
+    if (v == null) return '';
+    if (typeof v !== 'object') return String(v);
+    return String(v[S.lang] || v.uz || v.ru || v.en || Object.values(v).find(Boolean) || '');
+  };
+  const hash = s => { let h = 5381; for (let i=0;i<s.length;i++) h = ((h<<5)+h+s.charCodeAt(i))|0; return (h>>>0).toString(36); };
+  const keyOf = n => n.id!=null ? 'id:'+n.id : hash(String(n.date||'')+'|'+JSON.stringify(n.title||''));
+  /* дата: '2026-11-11', '2026-11-5' или '11.11.2026' → '2026-11-11' */
+  const normDate = d => { d = String(d||'').trim();
+    let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(d); if (m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+    m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(d); if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+    return d; };
+
+  function list(){
+    const raw = Array.isArray(window.MEDHUB_NEWS) ? window.MEDHUB_NEWS : [];
+    return raw.filter(n => n && typeof n==='object' && !n.hidden && (pick(n.title) || pick(n.text)))
+      .map(n => Object.assign({}, n, {date:normDate(n.date), _key:keyOf(n)}))
+      .sort((a,b) => (b.pinned?1:0)-(a.pinned?1:0) || String(b.date||'').localeCompare(String(a.date||'')));
+  }
+  const seenSet = () => new Set(Array.isArray(S.newsSeen) ? S.newsSeen : []);
+  const unread = () => { const s = seenSet(); return list().filter(n=>!s.has(n._key)).length; };
+  function markAll(){ S.newsSeen = list().map(n=>n._key); save(); badge(); }
+  function badge(){
+    const el = $('#news-count'); if (!el) return;
+    const n = state==='ok' ? unread() : 0;
+    el.textContent = n>9 ? '9+' : String(n);
+    el.classList.toggle('hidden', !n);
+  }
+
+  /* свои названия месяцев: в части браузеров нет узбекской локали (выходит «2026 M11 11») */
+  const MONTHS = {
+    ru:['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'],
+    uz:['yanvar','fevral','mart','aprel','may','iyun','iyul','avgust','sentabr','oktabr','noyabr','dekabr'],
+    en:['January','February','March','April','May','June','July','August','September','October','November','December']};
+  function day(d){
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d||'').trim());
+    if (!m || +m[2]<1 || +m[2]>12) return esc(d||'');
+    const dd = +m[3], mon = (MONTHS[S.lang]||MONTHS.ru)[+m[2]-1], y = m[1];
+    return esc(S.lang==='uz' ? `${dd}-${mon}, ${y}` : `${dd} ${mon} ${y}`);
+  }
+  function url(u){
+    u = String(u||'').trim();
+    if (!u) return '';
+    if (/^(https?:|mailto:|tel:)/i.test(u)) return u;
+    if (/^[a-z][a-z0-9+.-]*:/i.test(u)) return '';                  // javascript: и прочие схемы — запрещены
+    if (/^(www\.|t\.me\/|[\w-]+\.(uz|ru|com|org|net|me|io|app)(\/|$))/i.test(u)) return 'https://'+u;
+    return u;                                                      // относительный путь: img/news/…
+  }
+  const linkify = s => esc(s).replace(/https?:\/\/[^\s<]+[^\s<.,;:!?)\]]/g,
+    u => `<a href="${u}" target="_blank" rel="noopener">${u}</a>`);
+
+  function card(n, isNew, idx){
+    const title = pick(n.title), text = pick(n.text), img = url(n.image), link = url(n.link);
+    return `<article class="card news-item${n.pinned?' pinned':''}"${idx!=null?` id="news-${idx}"`:''}>
+      ${img ? `<img class="news-img" src="${esc(img)}" alt="" loading="lazy" onerror="this.remove()">` : ''}
+      <div class="news-meta">${ic('calendar')}<span>${day(n.date)}</span>
+        ${n.pinned ? `<span class="badge">${ic('pin')} ${t('news_pinned')}</span>` : ''}
+        ${isNew ? `<span class="badge news-new">${t('news_new')}</span>` : ''}</div>
+      ${title ? `<h3>${esc(title)}</h3>` : ''}
+      ${text ? `<div class="news-text">${linkify(text)}</div>` : ''}
+      ${link ? `<p class="news-link"><a class="btn small secondary" href="${esc(link)}" target="_blank" rel="noopener">${ic('link')} ${esc(pick(n.linkText) || t('news_open'))}</a></p>` : ''}
+    </article>`;
+  }
+
+  /* блок «последние новости» на стартовой странице */
+  function teaser(){
+    if (state !== 'ok') return '';
+    const items = list(); if (!items.length) return '';
+    const s = seenSet(), n = items.filter(x=>!s.has(x._key)).length;
+    return `<div class="card news-teaser">
+      <div class="nt-head"><h3>${ic('megaphone')} ${t('nav_news')}${n?` <span class="badge news-new">${n} · ${t('news_new')}</span>`:''}</h3>
+        <a href="#" class="nt-all" data-goto="news">${t('news_all')} →</a></div>
+      ${items.slice(0,2).map((x,i)=>{ const txt = pick(x.text).replace(/\s+/g,' ').trim();
+        return `<a href="#" class="nt-item" data-goto="news:${i}">
+          <span class="nt-date">${day(x.date)}${s.has(x._key)?'':' <i class="nt-dot"></i>'}</span>
+          <b>${esc(pick(x.title))}</b>
+          ${txt?`<span class="muted nt-snip">${esc(txt.length>150 ? txt.slice(0,150).trim()+'…' : txt)}</span>`:''}</a>`; }).join('')}
+    </div>`;
+  }
+
+  function refresh(){
+    badge();
+    if (currentRoute === 'news') go('news');
+    else if (currentRoute === 'grades' && !$('#view .news-teaser')){
+      const h = $('#view .page-head'); if (h) h.insertAdjacentHTML('afterend', teaser());
+    }
+  }
+  function load(){
+    window.addEventListener('error', e => {
+      if (e && e.filename && /\/js\/news\.js/.test(e.filename)) err = `${e.message} (line ${e.lineno})`;
+    });
+    const sc = document.createElement('script');
+    sc.src = 'js/news.js?t=' + Date.now();      // всегда свежая версия: новость видна сразу после деплоя
+    sc.onload = () => { state = Array.isArray(window.MEDHUB_NEWS) ? 'ok' : 'error'; refresh(); };
+    sc.onerror = () => { state = 'error'; err = err || 'js/news.js not found'; refresh(); };
+    document.head.appendChild(sc);
+  }
+
+  function copy(txt){
+    const ok = () => toast(t('news_ed_copied'));
+    const fallback = () => { const i = document.createElement('textarea'); i.value = txt; document.body.appendChild(i); i.select();
+      try{ document.execCommand('copy'); ok(); }catch(_e){} i.remove(); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(ok).catch(fallback);
+    else fallback();
+  }
+  /* генератор кода новости: заполнил форму → скопировал → вставил в js/news.js на GitHub */
+  function editorDlg(){
+    const L = ['uz','ru','en'];
+    const d = dlg(`<h3>${ic('megaphone')} ${t('news_ed_title')}</h3>
+      <p class="muted ne-hint">${t('news_ed_hint')}</p>
+      <div class="formrow g2">
+        <div><label class="f">${t('date')}</label><input type="date" id="ne-date" value="${todayISO()}"></div>
+        <div><label class="f">&nbsp;</label><label class="ne-pin"><input type="checkbox" id="ne-pin"> ${t('news_ed_pin')}</label></div>
+      </div>
+      ${L.map(l=>`<div class="ne-lang"><b>${l.toUpperCase()}</b>
+        <label class="f">${t('title')}</label><input type="text" id="ne-t-${l}">
+        <label class="f">${t('body')}</label><textarea id="ne-x-${l}"></textarea></div>`).join('')}
+      <label class="f">${t('news_ed_image')}</label><input type="text" id="ne-img" placeholder="img/news/photo.jpg">
+      <label class="f">${t('news_ed_link')}</label><input type="url" id="ne-link" placeholder="https://…">
+      <label class="f">${t('news_ed_preview')}</label><div id="ne-prev"></div>
+      <label class="f">${t('news_ed_code')}</label><textarea id="ne-code" class="ne-code" readonly></textarea>
+      <div class="chiprow">
+        <button class="btn" id="ne-copy">${ic('copy')} ${t('news_ed_copy')}</button>
+        <a class="btn secondary" href="${NEWS_EDIT_URL}" target="_blank" rel="noopener">${ic('link')} ${t('news_ed_github')}</a>
+        <a class="btn secondary" href="${NEWS_UPLOAD_URL}" target="_blank" rel="noopener">${ic('upload')} ${t('news_ed_upload')}</a>
+        <button class="btn secondary" data-close>${t('close')}</button>
+      </div>`);
+    d.classList.add('news-dlg');
+    const q = s => '`' + String(s).replace(/\\/g,'\\\\').replace(/`/g,'\\`').replace(/\$\{/g,'\\${') + '`';
+    const val = id => (d.querySelector('#'+id).value || '').trim();
+    const multi = pre => { const e = L.map(l=>[l, val(pre+l)]).filter(([,v])=>v);
+      return !e.length ? null : e.length===1 ? e[0][1] : Object.fromEntries(e); };
+    const lit = v => typeof v==='string' ? q(v) : '{\n    ' + Object.entries(v).map(([k,x])=>`${k}: ${q(x)}`).join(',\n    ') + '\n  }';
+    function update(){
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(val('ne-date')) ? val('ne-date') : todayISO();
+      const item = {date}, ti = multi('ne-t-'), tx = multi('ne-x-');
+      if (ti) item.title = ti;
+      if (tx) item.text = tx;
+      if (val('ne-img')) item.image = val('ne-img');
+      if (val('ne-link')) item.link = val('ne-link');
+      if (d.querySelector('#ne-pin').checked) item.pinned = true;
+      const lines = [`  date: '${date}',`];
+      if (ti) lines.push(`  title: ${lit(ti)},`);
+      if (tx) lines.push(`  text: ${lit(tx)},`);
+      if (item.image) lines.push(`  image: ${q(item.image)},`);
+      if (item.link) lines.push(`  link: ${q(item.link)},`);
+      if (item.pinned) lines.push(`  pinned: true,`);
+      const has = ti || tx;
+      d.querySelector('#ne-code').value = has ? `addNews({\n${lines.join('\n')}\n});\n` : '';
+      d.querySelector('#ne-prev').innerHTML = has ? card(item, true) : `<div class="empty">${t('news_ed_fill')}</div>`;
+    }
+    d.querySelectorAll('input,textarea').forEach(el=>el.addEventListener('input', update));
+    d.querySelector('#ne-pin').addEventListener('change', update);
+    d.querySelector('#ne-copy').onclick = () => { const c = d.querySelector('#ne-code').value;
+      if (!c) return toast(t('news_ed_fill')); copy(c); };
+    update();
+  }
+
+  return {list, seenSet, markAll, badge, card, teaser, load, editorDlg,
+    isEditor: () => editor, status: () => ({state, err})};
+})();
+
+/* ---------- NEWS page ---------- */
+ROUTES.news = function(){
+  const st = News.status();
+  let body;
+  if (st.state === 'loading') body = `<div class="empty">${t('loading')}</div>`;
+  else {
+    const items = News.list(), s = News.seenSet();
+    body = items.length ? items.map((n,i)=>News.card(n, !s.has(n._key), i)).join('') : `<div class="empty">${t('news_empty')}</div>`;
+  }
+  const warn = News.isEditor() && st.err ? `<div class="card news-warn">${ic('warn')} <b>js/news.js:</b> ${esc(st.err)}</div>` : '';
+  const ed = News.isEditor() ? `<p><button class="btn" id="news-add">${ic('megaphone')} ${t('news_ed_btn')}</button></p>` : '';
+  return head(t('nav_news'), t('news_hint')) + warn + ed + body;
+};
+ROUTES.news.after = function(arg){
+  if (News.status().state === 'ok') News.markAll();
+  const b = $('#news-add'); if (b) b.onclick = () => News.editorDlg();
+  if (arg != null){
+    const el = $('#news-'+arg);
+    if (el){ el.classList.add('flash'); setTimeout(()=>el.scrollIntoView({behavior:'smooth', block:'center'}), 80); }
+  }
+};
+
 /* ---------- 1. GRADES ---------- */
 ROUTES.grades = function(){
   const gpa = S.grades.length ? (S.grades.reduce((a,g)=>a+g.grade,0)/S.grades.length) : 0;
   const byCourse = {};
   for (let c=1;c<=6;c++){ const arr = S.grades.filter(g=>g.course===c);
     byCourse[c] = arr.length ? arr.reduce((a,g)=>a+g.grade,0)/arr.length : null; }
-  return head(t('nav_grades'), t('grades_hint')) + `
+  return head(t('nav_grades'), t('grades_hint')) + News.teaser() + `
   <div class="grid g4">
     <div class="stat"><div class="num">${gpa?gpa.toFixed(2):'—'}</div><div class="lbl">${t('gpa')}</div></div>
     <div class="stat"><div class="num">${S.grades.length}</div><div class="lbl">${t('total')} ${t('grade').toLowerCase()}</div></div>
@@ -2813,5 +3019,6 @@ ROUTES.anat3d.after = function(arg){
 
 applyChrome();
 go('grades');
+News.load();
 setTimeout(()=>{ try{ Auth.maybeShow(); }catch(_e){} }, 700);
 })();
