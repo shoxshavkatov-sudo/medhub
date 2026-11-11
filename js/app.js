@@ -1052,8 +1052,9 @@ ROUTES.search.after = function(q){
     if (scope === 'lib'){
       for (const r of window.ICD10) if ((r.c+' '+r.ru+' '+r.en).toLowerCase().includes(ql))
         res.push({where:'ICD-10', title:`${r.c} — ${r.ru}`, sub:r.en, route:'icd', arg:r.c});
-      for (const d of window.DRUGS) if ((d.n+' '+d.ind+' '+d.cl).toLowerCase().includes(ql))
-        res.push({where:t('nav_drugs'), title:d.n, sub:d.ind, route:'drugs', arg:d.n});
+      for (const d of allDrugs()){ const v = drugView(d);
+        if ((v.n+' '+v.ruN+' '+v.ind+' '+v.cl).toLowerCase().includes(ql))
+          res.push({where:t('nav_drugs'), title:v.n, sub:v.ind, route:'drugs', arg:v.n}); }
       for (const l of window.LABS) if ((l.a+' '+(l.m||'')+(l.f||'')).toLowerCase().includes(ql))
         res.push({where:t('nav_labs'), title:l.a, sub:`${l.m||''} ${l.f&&l.f!==l.m?'| '+l.f:''}`, route:'labs'});
       for (const p of allProtocols()) if ((p.t+' '+p.cat+' '+(p.uz&&p.uz.t||'')).toLowerCase().includes(ql))
@@ -1140,7 +1141,7 @@ const Ref = (function(){
     const fields = it => opt.fields ? opt.fields(it) : [];
     let inText = 0;
     const shown = groups.map(g => {
-      if (!tt.length || has(g.title, tt)) return {g, items: g.items.map(it => [it, ''])};
+      if (!tt.length || has(g.title, tt)) return {g, items: g.items.map(it => [it, '']), hit: 1};
       const byName = [], byText = [];
       for (const it of g.items){
         if (has(opt.hay(it), tt)) byName.push([it, '']);
@@ -1148,8 +1149,10 @@ const Ref = (function(){
           if (has(opt.hay(it) + ' ' + f.map(x => x[1] || '').join(' '), tt)) byText.push([it, snip(f, tt)]); }
       }
       inText += byText.length;
-      return {g, items: byName.concat(byText)};
+      return {g, items: byName.concat(byText), hit: byName.length};
     }).filter(x => x.items.length);
+    /* при поиске группы с совпадением в названии — выше групп, где нашлось только в тексте */
+    if (tt.length) shown.sort((a, b) => (b.hit ? 1 : 0) - (a.hit ? 1 : 0));
     const total = shown.reduce((n, x) => n + x.items.length, 0);
     if (!shown.length){ box.innerHTML = `<div class="empty">${t('ref_none')}</div>`; return; }
     const openItems = tt.length && total <= (opt.openUpTo || 0);
@@ -1278,19 +1281,37 @@ const DRUG_GROUPS = [
  ['endo', /бигуанид|инсулин|глюкокортикоид|щитовидн|тиреостатик/, {ru:'Эндокринология и гормоны',uz:'Endokrinologiya va gormonlar',en:'Endocrine & hormones'}],
  ['allergy', /антигистамин/, {ru:'Противоаллергические',uz:'Allergiyaga qarshi',en:'Antihistamines'}],
  ['psy', /сиозс|антидепрессант|бензодиазепин|противосудорож|нейролептик|нормотимик/, {ru:'Психиатрия и неврология',uz:'Psixiatriya va nevrologiya',en:'Psychiatry & neurology'}],
- ['vit', /железа|витамин/, {ru:'Витамины и железо',uz:'Vitaminlar va temir',en:'Vitamins & iron'}]
+ ['vit', /железа|витамин/, {ru:'Витамины и железо',uz:'Vitaminlar va temir',en:'Vitamins & iron'}],
+ ['tb', /противотуберкулёзн/, {ru:'Противотуберкулёзные',uz:'Silga qarshi',en:'Anti-tuberculosis'}],
+ ['parasite', /противопаразитарн|антигельминт/, {ru:'Противопаразитарные',uz:'Parazitlarga qarshi',en:'Antiparasitic'}],
+ ['immuno', /иммуносупрессор|бпвп|противоподагрическ/, {ru:'Ревматология и иммуносупрессоры',uz:'Revmatologiya va immunosupressorlar',en:'Rheumatology & immunosuppressants'}],
+ ['uro', /альфа-адреноблокатор|5-альфа|ингибитор фдэ-5|м-холинолитик мочев/, {ru:'Урология',uz:'Urologiya',en:'Urology'}],
+ ['gyn', /утеротоник|прогестаген|контрацептив/, {ru:'Акушерство и гинекология',uz:'Akusherlik va ginekologiya',en:'Obstetrics & gynecology'}],
+ ['fluids', /электролит|инфузионн|плазмозамен/, {ru:'Растворы и электролиты',uz:'Eritmalar va elektrolitlar',en:'Fluids & electrolytes'}],
+ ['anest', /анестетик|миорелаксант/, {ru:'Анестезиология',uz:'Anesteziologiya',en:'Anesthesiology'}],
+ ['antidote', /антидот|сорбент/, {ru:'Антидоты',uz:'Antidotlar',en:'Antidotes'}]
 ];
-const DRUG_MATCH_ORDER = ['blood','analg','abx','antiinf','diur','cardio','resp','emerg','gi','endo','allergy','psy','vit'];
+const DRUG_MATCH_ORDER = ['antidote','blood','analg','abx','tb','antiinf','parasite','diur','cardio','resp','emerg','gi','endo','allergy','psy','vit','immuno','uro','gyn','fluids','anest'];
 function drugGroupKey(cl){
   const c = Ref.norm(cl);
   for (const k of DRUG_MATCH_ORDER){ const g = DRUG_GROUPS.find(x => x[0] === k); if (g[1].test(c)) return k; }
   return 'other';
 }
+const allDrugs = () => (window.DRUGS || []).concat(window.DRUGS_MORE || []);
+/* единый вид препарата на текущем языке: mech/se — в объекте или в DRUG_EXTRA; узбекский — d.uz или DRUG_UZ */
+function drugView(d){
+  const X = (window.DRUG_EXTRA || {})[d.n] || [];
+  const v = {ruN: d.n, n: d.n, lat: d.lat || '', cl: d.cl || '', ind: d.ind || '', dose: d.dose || '', contr: d.contr || '',
+    inter: d.inter || '', preg: d.preg || '', mech: d.mech || X[0] || '', se: d.se || X[1] || '', g: d.g || drugGroupKey(d.cl)};
+  const u = S.lang === 'uz' ? (d.uz || (window.DRUG_UZ || {})[d.n]) : null;
+  if (u) for (const k of ['n', 'cl', 'ind', 'dose', 'contr', 'inter', 'preg', 'mech', 'se']) if (u[k]) v[k] = u[k];
+  return v;
+}
 function drugGroups(){
   const groups = DRUG_GROUPS.map(([key, , nm]) => ({key, title:Ref.L(nm), items:[]}));
   const other = {key:'other', title:t('ref_other'), items:[]};
-  for (const d of window.DRUGS){ const k = drugGroupKey(d.cl); (groups.find(g => g.key === k) || other).items.push(d); }
-  groups.concat([other]).forEach(g => g.items.sort((a, b) => a.n.localeCompare(b.n, 'ru')));
+  for (const d of allDrugs()){ const v = drugView(d); (groups.find(g => g.key === v.g) || other).items.push(v); }
+  groups.concat([other]).forEach(g => g.items.sort((a, b) => a.n.localeCompare(b.n, S.lang === 'uz' ? 'uz' : 'ru')));
   return groups.concat([other]).filter(g => g.items.length);
 }
 ROUTES.drugs = function(arg){
@@ -1299,26 +1320,27 @@ ROUTES.drugs = function(arg){
   <p class="muted" style="font-size:.8rem">${ic('warn')} ${t('drug_disclaimer')}</p>`;
 };
 ROUTES.drugs.after = function(){
-  const groups = drugGroups(), input = $('#dr-q'), box = $('#dr-list');
-  const X = window.DRUG_EXTRA || {};
-  const fields = d => [[t('d_ind'), d.ind], [t('d_mech'), (X[d.n] || [])[0]], [t('d_dose'), d.dose], [t('d_contra'), d.contr],
-    [t('d_se'), (X[d.n] || [])[1]], [t('d_inter'), d.inter], [t('d_preg'), d.preg]];
-  Ref.bind(input, () => Ref.render(box, groups, input.value, {
+  const input = $('#dr-q'), box = $('#dr-list');
+  const fields = v => [[t('d_ind'), v.ind], [t('d_mech'), v.mech], [t('d_dose'), v.dose], [t('d_contra'), v.contr],
+    [t('d_se'), v.se], [t('d_inter'), v.inter], [t('d_preg'), v.preg]];
+  const draw = () => Ref.render(box, drugGroups(), input.value, {
     openUpTo: 3,
-    hay: d => d.n + ' ' + (d.lat || '') + ' ' + d.cl,
+    hay: v => v.n + ' ' + v.ruN + ' ' + v.lat + ' ' + v.cl,
     fields,
-    row: (d, tt, open, sn) => `<details class="ref-item"${open ? ' open' : ''}>
-      <summary><b>${Ref.mark(d.n, tt)}</b>${S.latin && d.lat ? `<span class="muted"><i>${Ref.mark(d.lat, tt)}</i></span>` : ''}<span class="ref-cl">${Ref.mark(d.cl, tt)}</span>${sn || ''}</summary>
+    row: (v, tt, open, sn) => `<details class="ref-item"${open ? ' open' : ''}>
+      <summary><b>${Ref.mark(v.n, tt)}</b>${S.latin && v.lat ? `<span class="muted"><i>${Ref.mark(v.lat, tt)}</i></span>` : ''}<span class="ref-cl">${Ref.mark(v.cl, tt)}</span>${sn || ''}</summary>
       <div class="ref-body">
-        ${X[d.n] ? `<p><b>${t('d_mech')}:</b> ${Ref.mark(X[d.n][0], tt)}</p>` : ''}
-        <p><b>${t('d_ind')}:</b> ${Ref.mark(d.ind, tt)}</p>
-        <p><b>${t('d_dose')}:</b> ${Ref.mark(d.dose, tt)}</p>
-        <p style="color:var(--danger)"><b>${t('d_contra')}:</b> ${Ref.mark(d.contr, tt)}</p>
-        ${X[d.n] ? `<p><b>${t('d_se')}:</b> ${Ref.mark(X[d.n][1], tt)}</p>` : ''}
-        <p class="muted"><b>${t('d_inter')}:</b> ${Ref.mark(d.inter, tt)}</p>
-        <p class="muted"><b>${t('d_preg')}:</b> ${Ref.mark(d.preg, tt)}</p>
+        ${v.mech ? `<p><b>${t('d_mech')}:</b> ${Ref.mark(v.mech, tt)}</p>` : ''}
+        <p><b>${t('d_ind')}:</b> ${Ref.mark(v.ind, tt)}</p>
+        <p><b>${t('d_dose')}:</b> ${Ref.mark(v.dose, tt)}</p>
+        <p style="color:var(--danger)"><b>${t('d_contra')}:</b> ${Ref.mark(v.contr, tt)}</p>
+        ${v.se ? `<p><b>${t('d_se')}:</b> ${Ref.mark(v.se, tt)}</p>` : ''}
+        ${v.inter ? `<p class="muted"><b>${t('d_inter')}:</b> ${Ref.mark(v.inter, tt)}</p>` : ''}
+        ${v.preg ? `<p class="muted"><b>${t('d_preg')}:</b> ${Ref.mark(v.preg, tt)}</p>` : ''}
       </div></details>`
-  }));
+  });
+  Ref.bind(input, draw);
+  if (!RefData.ready()) RefData.load().then(draw);
 };
 
 /* ---------- LABS ---------- */
@@ -1351,16 +1373,16 @@ ROUTES.labs.after = function(){
 };
 
 /* ---------- данные справочника, которые грузятся по требованию (протоколы и др.) ---------- */
-const REF_DATA_V = '20261112a';
+const REF_DATA_V = '20261112b';
 const RefData = (function(){
-  const files = ['js/protocols-more.js'];
+  const files = ['js/protocols-more.js', 'js/drugs-more.js'];
   let p = null;
   function load(){
     if (!p) p = Promise.all(files.map(f => new Promise(res => { const s = document.createElement('script');
       s.src = ASSET_BASE + f + '?v=' + REF_DATA_V; s.onload = s.onerror = () => res(); document.head.appendChild(s); })));
     return p;
   }
-  const ready = () => !!window.PROTOCOLS_MORE;
+  const ready = () => !!(window.PROTOCOLS_MORE && window.DRUGS_MORE);
   return {load, ready};
 })();
 
