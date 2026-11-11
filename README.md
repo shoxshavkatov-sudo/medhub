@@ -77,7 +77,7 @@ npm start          # http://localhost:3000
 
 ### Вариант А — статический сайт (проще всего)
 
-`render.yaml` уже настроен на `runtime: static`:
+`render.yaml` уже настроен на `runtime: static`; сборка — `build.sh` (кладёт js/css в уникальную папку `r/<сборка>/`, чтобы CDN не отдавал старые версии после деплоя):
 
 1. https://dashboard.render.com → **New → Blueprint** → выбрать репозиторий
 2. Render опубликует файлы из корня репозитория → **Apply**

@@ -1,6 +1,10 @@
 /* MedHub — SPA logic: state, routes, modules, API */
 (function(){
 'use strict';
+/* папка, из которой загружен app.js: при сборке build.sh это r/<сборка>/ — подгружаемые файлы
+   (news.js, icd-info.js) берём оттуда же, чтобы CDN не отдал старую версию */
+const ASSET_BASE = (() => { try { const m = (document.currentScript && document.currentScript.src || '').match(/^(.*\/)js\/app\.js/);
+  return m ? m[1] : ''; } catch(_e){ return ''; } })();
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -576,7 +580,7 @@ const News = (function(){
       if (e && e.filename && /\/js\/news\.js/.test(e.filename)) err = `${e.message} (line ${e.lineno})`;
     });
     const sc = document.createElement('script');
-    sc.src = 'js/news.js?t=' + Date.now();      // всегда свежая версия: новость видна сразу после деплоя
+    sc.src = ASSET_BASE + 'js/news.js?t=' + Date.now();      // всегда свежая версия: новость видна сразу после деплоя
     sc.onload = () => { state = Array.isArray(window.MEDHUB_NEWS) ? 'ok' : 'error'; refresh(); };
     sc.onerror = () => { state = 'error'; err = err || 'js/news.js not found'; refresh(); };
     document.head.appendChild(sc);
@@ -1233,7 +1237,7 @@ const IcdInfo = (function(){
   function load(){
     if (window.ICD_INFO) return Promise.resolve();
     if (!p) p = new Promise(res => { const s = document.createElement('script');
-      s.src = 'js/icd-info.js?v=' + ICD_INFO_V; s.onload = s.onerror = () => res(); document.head.appendChild(s); });
+      s.src = ASSET_BASE + 'js/icd-info.js?v=' + ICD_INFO_V; s.onload = s.onerror = () => res(); document.head.appendChild(s); });
     return p;
   }
   const LBL = ['icd_i_what', 'icd_i_sym', 'icd_i_dx', 'icd_i_tx'];
