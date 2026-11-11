@@ -1046,13 +1046,13 @@ ROUTES.search.after = function(q){
     const res = [];
     if (scope === 'lib'){
       for (const r of window.ICD10) if ((r.c+' '+r.ru+' '+r.en).toLowerCase().includes(ql))
-        res.push({where:'ICD-10', title:`${r.c} — ${r.ru}`, sub:r.en, route:'icd'});
+        res.push({where:'ICD-10', title:`${r.c} — ${r.ru}`, sub:r.en, route:'icd', arg:r.c});
       for (const d of window.DRUGS) if ((d.n+' '+d.ind+' '+d.cl).toLowerCase().includes(ql))
-        res.push({where:t('nav_drugs'), title:d.n, sub:d.ind, route:'drugs'});
+        res.push({where:t('nav_drugs'), title:d.n, sub:d.ind, route:'drugs', arg:d.n});
       for (const l of window.LABS) if ((l.a+' '+(l.m||'')+(l.f||'')).toLowerCase().includes(ql))
         res.push({where:t('nav_labs'), title:l.a, sub:`${l.m||''} ${l.f&&l.f!==l.m?'| '+l.f:''}`, route:'labs'});
       for (const p of window.PROTOCOLS) if ((p.t+' '+p.cat).toLowerCase().includes(ql))
-        res.push({where:t('nav_protocols'), title:p.t, sub:p.cat, route:'protocols'});
+        res.push({where:t('nav_protocols'), title:p.t, sub:p.cat, route:'protocols', arg:p.t});
       for (const c of window.CALCS) if (c.n.toLowerCase().includes(ql))
         res.push({where:t('nav_calc'), title:c.n, sub:'', route:'calcs'});
       for (const z of window.PAIN_ZONES) if ((z.n+' '+z.causes).toLowerCase().includes(ql))
@@ -1079,60 +1079,166 @@ ROUTES.search.after = function(q){
     }
     box.innerHTML = res.length ? `<div class="muted" style="margin:8px 0">${t('results_in')}: ${res.length}</div>` +
       res.slice(0,40).map(r=>`<div class="sr"><div class="where">${esc(r.where)}</div>
-        <a href="#" data-route="${r.route}">${esc(r.title)}</a>${r.sub?`<div class="muted" style="font-size:.82rem">${esc(r.sub)}</div>`:''}</div>`).join('')
+        <a href="#" data-route="${r.route}"${r.arg?` data-arg="${esc(r.arg)}"`:''}>${esc(r.title)}</a>${r.sub?`<div class="muted" style="font-size:.82rem">${esc(r.sub)}</div>`:''}</div>`).join('')
       : `<div class="empty">${t('empty')}</div>`;
-    box.querySelectorAll('[data-route]').forEach(a=>a.onclick=e=>{e.preventDefault(); go(a.dataset.route);});
+    box.querySelectorAll('[data-route]').forEach(a=>a.onclick=e=>{e.preventDefault(); go(a.dataset.route, a.dataset.arg);});
   }
 };
 
+/* ---------- СПРАВКА: компактные группы + поиск (МКБ, фармакология, протоколы) ----------
+   По умолчанию — только свёрнутые группы. При поиске остаются группы с совпадениями,
+   они раскрыты, совпадения подсвечены; если запрос совпал с названием группы — вся группа. */
+const Ref = (function(){
+  const norm = s => String(s ?? '').toLowerCase().replace(/ё/g, 'е');
+  const terms = q => norm(q).split(/\s+/).filter(Boolean);
+  const has = (hay, tt) => { const h = norm(hay); return tt.every(x => h.includes(x)); };
+  /* подсветка совпадений: ищем по исходному тексту, экранируем по кусочкам */
+  function mark(text, tt){
+    text = String(text ?? '');
+    if (!tt || !tt.length) return esc(text);
+    const low = norm(text), hits = [];
+    for (const x of tt){ let i = 0; while ((i = low.indexOf(x, i)) !== -1){ hits.push([i, i + x.length]); i += x.length; } }
+    if (!hits.length) return esc(text);
+    hits.sort((a, b) => a[0] - b[0]);
+    let out = '', pos = 0;
+    for (const [a, b] of hits){
+      if (b <= pos) continue;
+      const s = Math.max(a, pos);
+      out += esc(text.slice(pos, s)) + '<mark>' + esc(text.slice(s, b)) + '</mark>';
+      pos = b;
+    }
+    return out + esc(text.slice(pos));
+  }
+  const L = o => (o && (o[S.lang] || o.ru)) || '';
+  /* groups: [{key, tag, title, range, items}] ; opt: {hay(item), row(item, tt, open), openUpTo} */
+  function render(box, groups, q, opt){
+    const tt = terms(q);
+    let shown = groups.map(g => ({g, items: !tt.length ? g.items
+      : has(g.title, tt) ? g.items
+      : g.items.filter(it => has(opt.hay(it), tt))})).filter(x => x.items.length);
+    const total = shown.reduce((n, x) => n + x.items.length, 0);
+    if (!shown.length){ box.innerHTML = `<div class="empty">${t('ref_none')}</div>`; return; }
+    const openItems = tt.length && total <= (opt.openUpTo || 0);
+    box.innerHTML = (tt.length ? `<div class="ref-found muted">${t('ref_found')}: <b>${total}</b></div>` : '') +
+      shown.map(({g, items}) => `<details class="ref-grp" data-g="${esc(g.key)}"${tt.length ? ' open' : ''}>
+        <summary>${g.tag ? `<span class="ref-gt">${esc(g.tag)}</span>` : ''}<span class="ref-gn">${mark(g.title, tt)}</span>
+          ${g.range ? `<span class="ref-gr">${esc(g.range)}</span>` : ''}<span class="ref-gc">${items.length}</span></summary>
+        <div class="ref-items">${items.map(it => opt.row(it, tt, openItems)).join('')}</div></details>`).join('');
+  }
+  /* поле поиска: ввод с задержкой, Esc очищает */
+  function bind(input, draw){
+    let tm = 0;
+    input.addEventListener('input', () => { clearTimeout(tm); tm = setTimeout(draw, 110); });
+    input.addEventListener('keydown', e => { if (e.key === 'Escape' && input.value){ input.value = ''; draw(); } });
+    draw();
+  }
+  const searchBox = (id, ph, val) => `<div class="card ref-search">${ic('search')}<input type="search" id="${id}" placeholder="${esc(ph)}" value="${esc(val || '')}" autocomplete="off"></div>`;
+  return {norm, terms, has, mark, render, bind, searchBox, L};
+})();
+
 /* ---------- ICD ---------- */
-ROUTES.icd = function(){
-  return head(t('nav_icd'), t('icd_hint')) + `
-  <div class="card"><input type="search" id="icd-q" placeholder="${t('search')}…"></div>
-  <div class="card"><div id="icd-list" class="table-wrap"></div></div>
-  <div class="card"><h3>${t('icd11_title')}</h3><p class="muted" style="font-size:.85rem">${t('icd11_hint')}</p>
-    <div class="table-wrap"><table><tbody>
-      ${window.ICD11_CODES.map(c=>`<tr><td><b>${c[0]}</b></td><td>${esc(c[1])}</td></tr>`).join('')}
-    </tbody></table></div>
-    <details style="margin-top:8px"><summary class="muted">${t('icd11_title')} — ${t('group_lab')} (главы)</summary>
-      <div class="chiprow">${window.ICD11_CHAPTERS.map(c=>`<span class="badge">${c[0]} ${esc(c[1])}</span>`).join('')}</div>
-    </details>
-    <p><a href="https://icd.who.int/browse/2024-01/mms/ru" target="_blank" rel="noopener">WHO ICD-11 ↗</a></p>
-  </div>`;
+const ICD_CHAPTERS = [
+ ['I','A00','B99',{ru:'Инфекционные и паразитарные болезни',uz:'Yuqumli va parazitar kasalliklar',en:'Infectious and parasitic diseases'}],
+ ['II','C00','D48',{ru:'Новообразования',uz:"O'smalar",en:'Neoplasms'}],
+ ['III','D50','D89',{ru:'Болезни крови и иммунные нарушения',uz:'Qon kasalliklari va immun buzilishlar',en:'Blood and immune disorders'}],
+ ['IV','E00','E90',{ru:'Эндокринные болезни и обмен веществ',uz:'Endokrin kasalliklar va moddalar almashinuvi',en:'Endocrine, nutritional and metabolic'}],
+ ['V','F00','F99',{ru:'Психические расстройства',uz:'Ruhiy buzilishlar',en:'Mental and behavioural disorders'}],
+ ['VI','G00','G99',{ru:'Болезни нервной системы',uz:'Asab tizimi kasalliklari',en:'Nervous system'}],
+ ['VII','H00','H59',{ru:'Болезни глаза',uz:"Ko'z kasalliklari",en:'Eye and adnexa'}],
+ ['VIII','H60','H95',{ru:'Болезни уха',uz:'Quloq kasalliklari',en:'Ear and mastoid process'}],
+ ['IX','I00','I99',{ru:'Болезни системы кровообращения',uz:'Qon aylanish tizimi kasalliklari',en:'Circulatory system'}],
+ ['X','J00','J99',{ru:'Болезни органов дыхания',uz:"Nafas a'zolari kasalliklari",en:'Respiratory system'}],
+ ['XI','K00','K93',{ru:'Болезни органов пищеварения',uz:"Hazm a'zolari kasalliklari",en:'Digestive system'}],
+ ['XII','L00','L99',{ru:'Болезни кожи и подкожной клетчатки',uz:'Teri va teri osti kasalliklari',en:'Skin and subcutaneous tissue'}],
+ ['XIII','M00','M99',{ru:'Болезни костно-мышечной системы',uz:'Suyak-mushak tizimi kasalliklari',en:'Musculoskeletal system'}],
+ ['XIV','N00','N99',{ru:'Болезни мочеполовой системы',uz:'Siydik-tanosil tizimi kasalliklari',en:'Genitourinary system'}],
+ ['XV','O00','O99',{ru:'Беременность, роды и послеродовой период',uz:"Homiladorlik, tug'ruq va chilla davri",en:'Pregnancy, childbirth and puerperium'}],
+ ['XVI','P00','P96',{ru:'Перинатальный период',uz:'Perinatal davr holatlari',en:'Perinatal period'}],
+ ['XVII','Q00','Q99',{ru:'Врождённые аномалии',uz:"Tug'ma nuqsonlar",en:'Congenital malformations'}],
+ ['XVIII','R00','R99',{ru:'Симптомы и отклонения от нормы',uz:"Simptomlar va me'yordan og'ishlar",en:'Symptoms, signs and abnormal findings'}],
+ ['XIX','S00','T98',{ru:'Травмы и отравления',uz:'Jarohatlar va zaharlanishlar',en:'Injury and poisoning'}],
+ ['XX','V01','Y98',{ru:'Внешние причины',uz:'Tashqi sabablar',en:'External causes'}],
+ ['XXI','Z00','Z99',{ru:'Факторы, влияющие на здоровье',uz:"Sog'liqqa ta'sir etuvchi omillar",en:'Factors influencing health status'}],
+ ['XXII','U00','U85',{ru:'Коды для особых целей',uz:'Maxsus maqsadlar uchun kodlar',en:'Codes for special purposes'}]
+];
+function icdGroups(){
+  const groups = ICD_CHAPTERS.map(([tag, lo, hi, nm]) => ({key:'ch'+tag, tag, title:Ref.L(nm), range:`${lo}–${hi}`, lo, hi, items:[]}));
+  const other = {key:'other', tag:'', title:t('ref_other'), range:'', items:[]};
+  for (const r of window.ICD10){
+    const c3 = String(r.c).slice(0, 3).toUpperCase();
+    (groups.find(g => c3 >= g.lo && c3 <= g.hi) || other).items.push(r);
+  }
+  const icd11 = {key:'icd11', tag:'11', title:t('icd11_title'), range:'', items:(window.ICD11_CODES||[]).map(c => ({c:c[0], ru:c[1], en:'', v11:true}))};
+  return groups.concat([other, icd11]).filter(g => g.items.length);
+}
+ROUTES.icd = function(arg){
+  return head(t('nav_icd'), t('icd_hint')) + Ref.searchBox('icd-q', t('ref_ph_icd'), arg) + `
+  <div id="icd-list" class="ref-list"></div>
+  <details class="ref-grp ref-extra"><summary><span class="ref-gt">11</span><span class="ref-gn">${t('icd11_title')} — ${t('ref_chapters')}</span><span class="ref-gc">${(window.ICD11_CHAPTERS||[]).length}</span></summary>
+    <div class="ref-items"><p class="muted" style="font-size:.85rem;margin:6px 8px">${t('icd11_hint')}</p>
+      <div class="chiprow" style="margin:6px 8px">${(window.ICD11_CHAPTERS||[]).map(c=>`<span class="badge">${c[0]} ${esc(c[1])}</span>`).join('')}</div>
+      <p style="margin:6px 8px"><a href="https://icd.who.int/browse/2024-01/mms/ru" target="_blank" rel="noopener">WHO ICD-11 ↗</a></p></div>
+  </details>`;
 };
 ROUTES.icd.after = function(){
-  const draw = ()=>{
-    const q = ($('#icd-q').value||'').toLowerCase().trim();
-    const rows = window.ICD10.filter(r=>!q || (r.c+' '+r.ru+' '+r.en).toLowerCase().includes(q));
-    $('#icd-list').innerHTML = `<table><thead><tr><th>МКБ</th><th>RU</th><th>EN</th></tr></thead><tbody>
-      ${rows.slice(0,120).map(r=>`<tr><td><b>${r.c}</b></td><td>${esc(r.ru)}</td><td class="muted">${esc(r.en)}</td></tr>`).join('')}
-      </tbody></table>${rows.length>120?`<p class="muted" style="font-size:.8rem">…показано 120 из ${rows.length}. Уточните запрос.</p>`:''}`;
-  };
-  $('#icd-q').addEventListener('input', draw); draw();
+  const groups = icdGroups(), input = $('#icd-q'), box = $('#icd-list');
+  Ref.bind(input, () => Ref.render(box, groups, input.value, {
+    hay: r => r.c + ' ' + r.ru + ' ' + r.en,
+    row: (r, tt) => `<div class="ref-row"><b>${Ref.mark(r.c, tt)}</b><span>${Ref.mark(r.ru, tt)}</span><span class="en muted">${Ref.mark(r.en, tt)}</span></div>`
+  }));
 };
 
 /* ---------- DRUGS ---------- */
-ROUTES.drugs = function(){
-  return head(t('nav_drugs'), t('drugs_hint')) + `
-  <div class="card"><input type="search" id="dr-q" placeholder="${t('search')}…"></div>
-  <div id="dr-list"></div>
+/* классы в данных очень дробные (75 на 78 препаратов) — сводим в фармгруппы.
+   Порядок проверки важен: аспирин («НПВС / антиагрегант») — в «Кровь», ингаляционный М-холиноблокатор — в «Дыхание». */
+const DRUG_GROUPS = [
+ ['analg', /анальгетик|нпвс/, {ru:'Обезболивающие и НПВС',uz:"Og'riq qoldiruvchi va yallig'lanishga qarshi",en:'Analgesics & NSAIDs'}],
+ ['abx', /антибиотик|цефалоспорин|макролид|фторхинолон|аминогликозид|гликопептид|противомикроб|тетрациклин/, {ru:'Антибиотики и противомикробные',uz:'Antibiotiklar va mikroblarga qarshi',en:'Antibiotics & antimicrobials'}],
+ ['antiinf', /противогрибк|противовирус|нейраминидаз/, {ru:'Противогрибковые и противовирусные',uz:"Zamburug' va virusga qarshi",en:'Antifungals & antivirals'}],
+ ['cardio', /статин|бета-блокатор|иапф|кальциевых каналов|сердечный гликозид|нитрат|антиаритмик/, {ru:'Сердце и сосуды',uz:'Yurak va qon tomirlar',en:'Cardiovascular'}],
+ ['blood', /антикоагул|антиагрегант|фактора xa|нмг|плазминоген/, {ru:'Кровь: антикоагулянты и антиагреганты',uz:'Qon: antikoagulyant va antiagregantlar',en:'Anticoagulants & antiplatelets'}],
+ ['diur', /диуретик|карбоангидраз/, {ru:'Диуретики',uz:'Diuretiklar',en:'Diuretics'}],
+ ['resp', /бета-2|ингаляцион|игкс/, {ru:'Дыхательная система',uz:'Nafas tizimi',en:'Respiratory'}],
+ ['emerg', /м-холиноблокатор|симпатомиметик|вазопрессор|катехоламин/, {ru:'Вазопрессоры и вегетотропные',uz:'Vazopressor va vegetotrop vositalar',en:'Vasopressors & autonomic'}],
+ ['gi', /протонной помпы|h2-блокатор|прокинетик|антиэметик|противодиарей|спазмолитик/, {ru:'Желудочно-кишечный тракт',uz:'Oshqozon-ichak tizimi',en:'Gastrointestinal'}],
+ ['endo', /бигуанид|инсулин|глюкокортикоид|щитовидн|тиреостатик/, {ru:'Эндокринология и гормоны',uz:'Endokrinologiya va gormonlar',en:'Endocrine & hormones'}],
+ ['allergy', /антигистамин/, {ru:'Противоаллергические',uz:'Allergiyaga qarshi',en:'Antihistamines'}],
+ ['psy', /сиозс|антидепрессант|бензодиазепин|противосудорож|нейролептик|нормотимик/, {ru:'Психиатрия и неврология',uz:'Psixiatriya va nevrologiya',en:'Psychiatry & neurology'}],
+ ['vit', /железа|витамин/, {ru:'Витамины и железо',uz:'Vitaminlar va temir',en:'Vitamins & iron'}]
+];
+const DRUG_MATCH_ORDER = ['blood','analg','abx','antiinf','diur','cardio','resp','emerg','gi','endo','allergy','psy','vit'];
+function drugGroupKey(cl){
+  const c = Ref.norm(cl);
+  for (const k of DRUG_MATCH_ORDER){ const g = DRUG_GROUPS.find(x => x[0] === k); if (g[1].test(c)) return k; }
+  return 'other';
+}
+function drugGroups(){
+  const groups = DRUG_GROUPS.map(([key, , nm]) => ({key, title:Ref.L(nm), items:[]}));
+  const other = {key:'other', title:t('ref_other'), items:[]};
+  for (const d of window.DRUGS){ const k = drugGroupKey(d.cl); (groups.find(g => g.key === k) || other).items.push(d); }
+  groups.concat([other]).forEach(g => g.items.sort((a, b) => a.n.localeCompare(b.n, 'ru')));
+  return groups.concat([other]).filter(g => g.items.length);
+}
+ROUTES.drugs = function(arg){
+  return head(t('nav_drugs'), t('drugs_hint')) + Ref.searchBox('dr-q', t('ref_ph_drugs'), arg) + `
+  <div id="dr-list" class="ref-list"></div>
   <p class="muted" style="font-size:.8rem">${ic('warn')} ${t('drug_disclaimer')}</p>`;
 };
 ROUTES.drugs.after = function(){
-  const draw = ()=>{
-    const q = ($('#dr-q').value||'').toLowerCase().trim();
-    const rows = window.DRUGS.filter(d=>!q || (d.n+' '+d.ind+' '+d.cl+' '+(d.lat||'')).toLowerCase().includes(q));
-    $('#dr-list').innerHTML = rows.map(d=>`<div class="entry">
-      <div class="meta"><span class="badge">${esc(d.cl)}</span>${S.latin&&d.lat?`<span class="badge">${ic('pill')} ${esc(d.lat)}</span>`:''}</div>
-      <h3>${esc(d.n)}</h3>
-      <p><b>${t('d_ind')}:</b> ${esc(d.ind)}</p>
-      <p><b>${t('d_dose')}:</b> ${esc(d.dose)}</p>
-      <p style="color:var(--danger)"><b>${t('d_contra')}:</b> ${esc(d.contr)}</p>
-      <p class="muted"><b>${t('d_inter')}:</b> ${esc(d.inter)}</p>
-      <p class="muted"><b>${t('d_preg')}:</b> ${esc(d.preg)}</p>
-    </div>`).join('') || `<div class="empty">${t('empty')}</div>`;
-  };
-  $('#dr-q').addEventListener('input', draw); draw();
+  const groups = drugGroups(), input = $('#dr-q'), box = $('#dr-list');
+  Ref.bind(input, () => Ref.render(box, groups, input.value, {
+    openUpTo: 3,
+    hay: d => d.n + ' ' + (d.lat || '') + ' ' + d.cl + ' ' + d.ind,
+    row: (d, tt, open) => `<details class="ref-item"${open ? ' open' : ''}>
+      <summary><b>${Ref.mark(d.n, tt)}</b>${S.latin && d.lat ? `<span class="muted"><i>${Ref.mark(d.lat, tt)}</i></span>` : ''}<span class="ref-cl">${Ref.mark(d.cl, tt)}</span></summary>
+      <div class="ref-body">
+        <p><b>${t('d_ind')}:</b> ${Ref.mark(d.ind, tt)}</p>
+        <p><b>${t('d_dose')}:</b> ${esc(d.dose)}</p>
+        <p style="color:var(--danger)"><b>${t('d_contra')}:</b> ${esc(d.contr)}</p>
+        <p class="muted"><b>${t('d_inter')}:</b> ${esc(d.inter)}</p>
+        <p class="muted"><b>${t('d_preg')}:</b> ${esc(d.preg)}</p>
+      </div></details>`
+  }));
 };
 
 /* ---------- LABS ---------- */
@@ -1165,17 +1271,32 @@ ROUTES.labs.after = function(){
 };
 
 /* ---------- PROTOCOLS ---------- */
-ROUTES.protocols = function(){
-  return head(t('nav_protocols'), t('protocols_hint')) + window.PROTOCOLS.map(p=>`
-  <div class="entry">
-    <div class="meta"><span class="badge warn">${esc(p.cat)}</span></div>
-    <h3>${esc(p.t)}</h3>
-    <h3 style="font-size:.9rem;color:var(--muted)">${t('p_diff')}</h3>
-    <ul class="steps">${p.diff.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
-    <h3 style="font-size:.9rem;color:var(--muted)">${t('p_steps')}</h3>
-    <ol class="steps">${p.steps.map(x=>`<li>${esc(x)}</li>`).join('')}</ol>
-    <p style="color:var(--danger)"><b>${t('p_redflags')}:</b> ${esc(p.red)}</p>
-  </div>`).join('');
+function protocolGroups(){
+  const groups = [];
+  for (const p of window.PROTOCOLS){
+    let g = groups.find(x => x.title === p.cat);
+    if (!g){ g = {key:'p' + groups.length, title:p.cat, items:[]}; groups.push(g); }
+    g.items.push(p);
+  }
+  return groups;
+}
+ROUTES.protocols = function(arg){
+  return head(t('nav_protocols'), t('protocols_hint')) + Ref.searchBox('pr-q', t('ref_ph_protocols'), arg) + `
+  <div id="pr-list" class="ref-list"></div>`;
+};
+ROUTES.protocols.after = function(){
+  const groups = protocolGroups(), input = $('#pr-q'), box = $('#pr-list');
+  Ref.bind(input, () => Ref.render(box, groups, input.value, {
+    openUpTo: 2,
+    hay: p => [p.t, p.cat, p.red].concat(p.diff, p.steps).join(' '),
+    row: (p, tt, open) => `<details class="ref-item"${open ? ' open' : ''}>
+      <summary><b>${Ref.mark(p.t, tt)}</b></summary>
+      <div class="ref-body">
+        <h4>${t('p_diff')}</h4><ul class="steps">${p.diff.map(x => `<li>${Ref.mark(x, tt)}</li>`).join('')}</ul>
+        <h4>${t('p_steps')}</h4><ol class="steps">${p.steps.map(x => `<li>${Ref.mark(x, tt)}</li>`).join('')}</ol>
+        <p style="color:var(--danger)"><b>${t('p_redflags')}:</b> ${Ref.mark(p.red, tt)}</p>
+      </div></details>`
+  }));
 };
 
 /* ---------- CALCULATORS ---------- */
