@@ -515,3 +515,25 @@ mark{background:color-mix(in srgb,var(--warn) 38%,transparent);color:inherit;bor
   .ref-gr{display:none}
   .ref-body{padding-left:14px}
 }
+/* МКБ: строка кода раскрывается в краткую справку */
+.ref-icd>summary.ref-row{display:grid;grid-template-columns:56px 1fr 1fr 12px;align-items:baseline;gap:10px;padding:6px 8px;border-radius:8px;font-size:.87rem}
+.ref-icd>summary::before{content:none}
+.ref-icd>summary::after{content:'›';grid-column:4;grid-row:1;justify-self:end;color:var(--muted);font-weight:700;transition:transform .2s}
+.ref-icd[open]>summary::after{transform:rotate(90deg)}
+.ref-icd:nth-child(even)>summary{background:color-mix(in srgb,var(--panel2) 55%,transparent)}
+.ref-icd>summary:hover,.ref-icd[open]>summary{background:var(--panel2)}
+.ref-icd>.ref-body{padding:6px 12px 10px 74px}
+.icd-links{font-size:.8rem;color:var(--muted)}
+.icd-links .ic{width:13px;height:13px}
+@media (max-width:640px){
+  .ref-icd>summary.ref-row{grid-template-columns:50px 1fr 12px;gap:2px 8px}
+  .ref-icd>summary .en{grid-column:2}
+  .ref-icd>summary::after{grid-column:3;grid-row:1}
+  .ref-icd>.ref-body{padding-left:12px}
+}
+/* фрагмент с совпадением по содержимому — под строкой результата */
+.ref-snip{display:block;flex-basis:100%;margin:2px 0 0 18px;font-size:.8rem;font-weight:400;line-height:1.4;color:var(--muted)}
+.ref-snip b{color:var(--text);font-weight:600}
+.ref-icd>summary .ref-snip{grid-column:2 / -1;margin-left:0}
+.ref-item[open]>summary .ref-snip{display:none}
+@media (max-width:640px){ .ref-icd>summary .ref-snip{grid-column:2 / 3} }
