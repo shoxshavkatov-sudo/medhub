@@ -26,6 +26,20 @@ catch { S = Object.assign({}, DEFAULTS); }
 const save = () => localStorage.setItem('medhub', JSON.stringify(S));
 window.LANG = S.lang;
 
+/* ---------------- оценки: 100-балльная шкала (как в вузах Узбекистана) ----------------
+   86–100 → «5» отлично, 71–85 → «4» хорошо, 55–70 → «3» удовлетворительно, 0–54 → «2».
+   Старые оценки 2–5 (записи без scale:100) переводятся в середину своего диапазона. */
+const GRADE_BANDS = [[86, 5, 'ok'], [71, 4, 'ok'], [55, 3, 'warn'], [0, 2, 'bad']];
+const GRADE_LEGACY = {2:40, 3:62, 4:78, 5:93};
+const gv = g => { const x = +(g && g.grade); return g && g.scale !== 100 && GRADE_LEGACY[x] && Number.isInteger(x) ? GRADE_LEGACY[x] : x; };
+const gBand = v => GRADE_BANDS.find(b => v >= b[0]) || GRADE_BANDS[3];
+const gAvg = rows => rows.length ? rows.reduce((a, g) => a + gv(g), 0) / rows.length : 0;
+const gFmt = v => String(Math.round(v * 10) / 10);
+if (Array.isArray(S.grades) && S.grades.some(g => g && g.scale !== 100)){
+  S.grades = S.grades.map(g => g && g.scale !== 100 ? Object.assign({}, g, {grade: gv(g), scale: 100}) : g);
+  save();
+}
+
 /* ---------------- свои SVG-иконки (вместо эмодзи) ---------------- */
 const ICONS = {
  bone:'<path d="M7 10a2.5 2.5 0 1 1 3-3l4-1 3 3-1 4a2.5 2.5 0 1 1-3 3l-4 1-3-3Z"/>',
@@ -193,7 +207,7 @@ const Store = (function(){
       const g = db.groups[m[1]]; if (!g) return Promise.reject(new Error('group not found'));
       const rec = {id:uid2(), memberId:String(body.memberId||''), authorName:String(body.authorName||'').slice(0,40),
         subject:String(body.subject||'').slice(0,80), course:+body.course||1, grade:+body.grade, cred:+body.cred||null,
-        date:String(body.date||'').slice(0,10), ts:Date.now()};
+        scale: +body.scale===100 ? 100 : null, date:String(body.date||'').slice(0,10), ts:Date.now()};
       g.grades = g.grades||[]; g.grades.push(rec); saveL(db);
       return Promise.resolve({grade:rec});
     }
@@ -655,14 +669,16 @@ ROUTES.news.after = function(arg){
 };
 
 /* ---------- 1. GRADES ---------- */
+/* значок оценки: «86 · 5» цветом диапазона */
+const gChip = v => { const b = gBand(v); return `<span class="badge ${b[2]} gchip" title="${esc(t('band_'+b[1]))}">${gFmt(v)} <i>· ${b[1]}</i></span>`; };
 ROUTES.grades = function(){
-  const gpa = S.grades.length ? (S.grades.reduce((a,g)=>a+g.grade,0)/S.grades.length) : 0;
+  const gpa = gAvg(S.grades), band = gBand(gpa);
   const byCourse = {};
   for (let c=1;c<=6;c++){ const arr = S.grades.filter(g=>g.course===c);
-    byCourse[c] = arr.length ? arr.reduce((a,g)=>a+g.grade,0)/arr.length : null; }
+    byCourse[c] = arr.length ? gAvg(arr) : null; }
   return head(t('nav_grades'), t('grades_hint')) + `
   <div class="grid stats g4">
-    <div class="stat"><div class="num">${gpa?gpa.toFixed(2):'—'}</div><div class="lbl">${t('gpa')}</div></div>
+    <div class="stat"><div class="num">${S.grades.length?gFmt(gpa)+'<small>/100</small>':'—'}</div><div class="lbl">${t('gpa')}${S.grades.length?` · <b>«${band[1]}»</b> ${t('band_'+band[1])}`:''}</div></div>
     <div class="stat"><div class="num">${S.grades.length}</div><div class="lbl">${t('total')} ${t('grade').toLowerCase()}</div></div>
     <div class="stat"><div class="num">${[...new Set(S.grades.map(g=>g.subject))].length}</div><div class="lbl">${t('subject')}</div></div>
     <div class="stat"><div class="num">${Object.entries(byCourse).filter(([,v])=>v).length}</div><div class="lbl">${t('by_course')}</div></div>
@@ -672,8 +688,8 @@ ROUTES.grades = function(){
     <div>${[1,2,3,4,5,6].map(c=>{ const v=byCourse[c];
       return `<div style="display:flex;align-items:center;gap:10px;margin:6px 0">
         <span style="width:64px;font-size:.8rem" class="muted">${t('course'+c)}</span>
-        <div class="progressbar" style="flex:1"><div style="width:${v?(v/5*100):0}%"></div></div>
-        <b style="width:36px;text-align:right">${v?v.toFixed(2):'—'}</b></div>`; }).join('')}</div>
+        <div class="progressbar" style="flex:1"><div style="width:${v!=null?v:0}%"></div></div>
+        <b style="width:44px;text-align:right">${v!=null?gFmt(v):'—'}</b></div>`; }).join('')}</div>
   </div>
   <div class="card"><h3>${t('trend')}</h3><canvas id="gpa-chart" height="180" style="width:100%"></canvas></div>
   <div class="card">
@@ -681,8 +697,10 @@ ROUTES.grades = function(){
     <div class="formrow g2">
       <div><label class="f">${t('subject')}</label><select id="g-sub">${window.SUBJECTS.map(s=>
         `<option value="${esc(s.n)}" data-c="${s.c}">${t('course'+s.c)} — ${esc(s.n)}</option>`).join('')}</select></div>
-      <div><label class="f">${t('grade')} (2–5)</label><input type="number" id="g-grade" min="2" max="5" step="1" value="5"></div>
+      <div><label class="f">${t('grade')} (0–100)</label><input type="number" id="g-grade" min="0" max="100" step="1" placeholder="0–100" inputmode="decimal">
+        <div class="g-band muted" id="g-band"></div></div>
     </div>
+    <p class="muted g-scale">${t('grade_scale_hint')}</p>
     <div class="formrow g2">
       <div><label class="f">${t('credits')}</label><input type="number" id="g-cred" min="1" max="12" value="3"></div>
       <div><label class="f">${t('date')}</label><input type="date" id="g-date" value="${todayISO()}"></div>
@@ -696,24 +714,27 @@ ROUTES.grades = function(){
 };
 ROUTES.grades.after = function(){
   $('#g-add').onclick = () => {
-    const sub = $('#g-sub'); const grade = +$('#g-grade').value;
-    if (!sub.value || grade<2 || grade>5) return toast(t('required'));
-    S.grades.push({id:uid(), subject:sub.value, course:+sub.selectedOptions[0].dataset.c, grade, cred:+$('#g-cred').value||null, date:$('#g-date').value||todayISO()});
+    const sub = $('#g-sub'), raw = $('#g-grade').value.trim(), grade = Math.round(+raw * 10) / 10;
+    if (!sub.value || raw === '' || !(grade >= 0 && grade <= 100)) return toast(t('grade_invalid'));
+    S.grades.push({id:uid(), subject:sub.value, course:+sub.selectedOptions[0].dataset.c, grade, scale:100, cred:+$('#g-cred').value||null, date:$('#g-date').value||todayISO()});
     save(); toast(t('saved'));
     if (S.group){
       const ms = $('#g-member');
       const memberId = (S.group.me.role==='admin' && ms && ms.value) ? ms.value : S.group.me.id;
       api(`/groups/${S.group.code}/grades`, {method:'POST', body:{memberId, authorName:S.group.me.name,
-        subject:sub.value, course:+sub.selectedOptions[0].dataset.c, grade, cred:+$('#g-cred').value||null,
+        subject:sub.value, course:+sub.selectedOptions[0].dataset.c, grade, scale:100, cred:+$('#g-cred').value||null,
         date:$('#g-date').value||todayISO()}}).catch(e=>toast(e.message));
     }
     go('grades');
   };
+  const gi = $('#g-grade'), gb = $('#g-band');
+  if (gi && gb) gi.oninput = () => { const v = +gi.value, ok = gi.value.trim() !== '' && v >= 0 && v <= 100;
+    gb.innerHTML = ok ? `= <b>«${gBand(v)[1]}»</b> ${t('band_'+gBand(v)[1])}` : (gi.value.trim() ? t('grade_invalid') : ''); };
   $$('[data-del]').forEach(b=>b.onclick=()=>{ S.grades = S.grades.filter(g=>g.id!==b.dataset.del); save(); go('grades'); });
   function gradeTable(rows){
     return `<div class="table-wrap"><table><thead><tr><th>${t('subject')}</th><th>${t('course')}</th><th>${t('grade')}</th><th>${t('credits')}</th><th>${t('date')}</th></tr></thead>
     <tbody>${rows.slice().sort((a,b)=>(b.ts||0)-(a.ts||0)).map(g=>`
-      <tr><td>${esc(g.subject)}</td><td>${t('course'+(g.course||1))}</td><td><b>${g.grade}</b></td><td>${g.cred||'—'}</td><td>${g.date||''}</td></tr>`).join('') ||
+      <tr><td>${esc(g.subject)}</td><td>${t('course'+(g.course||1))}</td><td>${gChip(gv(g))}</td><td>${g.cred||'—'}</td><td>${g.date||''}</td></tr>`).join('') ||
       `<tr><td colspan="5" class="muted">${t('empty')}</td></tr>`}</tbody></table></div>`;
   }
   (async ()=>{
@@ -728,8 +749,8 @@ ROUTES.grades.after = function(){
         if (mb && !mb.innerHTML) mb.innerHTML = `<label class="f">${t('grade_for')}</label><select id="g-member">${grp.members.map(m=>`<option value="${m.id}"${m.id===S.group.me.id?' selected':''}>${esc(m.name)}${m.role==='admin'?' ★':''}</option>`).join('')}</select>`;
         box.innerHTML = grp.members.map(m=>{
           const rows = grades.filter(g=>g.memberId===m.id);
-          const avg = rows.length ? (rows.reduce((a,g)=>a+g.grade,0)/rows.length).toFixed(2) : '—';
-          return `<h3 style="font-size:.95rem;margin:14px 0 6px">${m.role==='admin'?ic('crown'):ic('grad')} ${esc(m.name)} <span class="muted">· GPA ${avg}</span></h3>` + gradeTable(rows);
+          const avg = rows.length ? gFmt(gAvg(rows)) + '/100' : '—';
+          return `<h3 style="font-size:.95rem;margin:14px 0 6px">${m.role==='admin'?ic('crown'):ic('grad')} ${esc(m.name)} <span class="muted">· ${t('gpa')}: ${avg}</span></h3>` + gradeTable(rows);
         }).join('') || `<div class="empty">${t('empty')}</div>`;
       } else {
         box.innerHTML = gradeTable(grades.filter(g=>g.memberId===S.group.me.id).concat(S.grades));
@@ -737,21 +758,28 @@ ROUTES.grades.after = function(){
     }catch(e){ box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
   })();
   $('#g-pdf').onclick = ()=>PDFX.download('medhub-ocenki.pdf', t('nav_grades'), [
-    {kv:[t('gpa'), S.grades.length ? (S.grades.reduce((a,g)=>a+g.grade,0)/S.grades.length).toFixed(2) : '—']},
-    {table:{head:[t('subject'),t('course'),t('grade'),t('credits'),t('date')],
-      rows:S.grades.map(g=>[g.subject,t('course'+g.course),g.grade,g.cred||'—',g.date])}}]);
+    {kv:[t('gpa'), S.grades.length ? `${gFmt(gAvg(S.grades))}/100 («${gBand(gAvg(S.grades))[1]}»)` : '—']},
+    {table:{head:[t('subject'),t('course'),t('grade')+' (0–100)',t('credits'),t('date')],
+      rows:S.grades.map(g=>[g.subject,t('course'+g.course),`${gFmt(gv(g))} («${gBand(gv(g))[1]}»)`,g.cred||'—',g.date])}}]);
   // trend chart: running average of grades sorted by date
   const cv = $('#gpa-chart'); if (cv){ const ctx = cv.getContext('2d'); cv.width = cv.offsetWidth;
     const pts = S.grades.slice().sort((a,b)=>a.date<b.date?-1:1);
-    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent');
+    const css = getComputedStyle(document.documentElement), w = cv.width, h = 180;
+    const Y = v => h - (v/100)*(h-40) - 20;
+    /* границы оценок: 55 — «3», 71 — «4», 86 — «5» */
+    ctx.save(); ctx.setLineDash([4, 4]); ctx.lineWidth = 1; ctx.strokeStyle = css.getPropertyValue('--line');
+    ctx.fillStyle = css.getPropertyValue('--muted'); ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
+    [[55, 3], [71, 4], [86, 5]].forEach(([v, m]) => { ctx.beginPath(); ctx.moveTo(20, Y(v)); ctx.lineTo(w - 4, Y(v)); ctx.stroke();
+      ctx.fillText(v + ' · ' + m, w - 6, Y(v) - 3); });
+    ctx.restore();
+    ctx.strokeStyle = css.getPropertyValue('--accent');
     ctx.lineWidth = 2; ctx.beginPath();
-    const w = cv.width, h = 180;
     pts.forEach((g,i)=>{ const x = 20 + i*(w-40)/Math.max(pts.length-1,1);
-      const y = h - ((g.grade-2)/3)*(h-40) - 20;
+      const y = Y(gv(g));
       i===0?ctx.moveTo(x,y):ctx.lineTo(x,y); });
     if (pts.length) ctx.stroke();
     ctx.fillStyle = ctx.strokeStyle; pts.forEach((g,i)=>{ const x = 20 + i*(w-40)/Math.max(pts.length-1,1);
-      const y = h - ((g.grade-2)/3)*(h-40) - 20; ctx.beginPath(); ctx.arc(x,y,3.5,0,7); ctx.fill(); });
+      const y = Y(gv(g)); ctx.beginPath(); ctx.arc(x,y,3.5,0,7); ctx.fill(); });
     if (!pts.length){ ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--muted');
       ctx.font='13px sans-serif'; ctx.textAlign='center'; ctx.fillText(t('empty'), w/2, h/2); }
   }
@@ -1067,7 +1095,7 @@ ROUTES.search.after = function(q){
       for (const e of S.events) if ((e.title+' '+(e.subject||'')).toLowerCase().includes(ql))
         res.push({where:t('nav_calendar'), title:e.title||t('ev_'+e.type), sub:e.date, route:'calendar'});
       for (const g of S.grades) if (g.subject.toLowerCase().includes(ql))
-        res.push({where:t('nav_grades'), title:g.subject, sub:`${t('grade')}: ${g.grade}`, route:'grades'});
+        res.push({where:t('nav_grades'), title:g.subject, sub:`${t('grade')}: ${gFmt(gv(g))}/100`, route:'grades'});
     }
     box.innerHTML = res.length ? `<div class="muted" style="margin:8px 0">${t('results_in')}: ${res.length}</div>` +
       res.slice(0,40).map(r=>`<div class="sr"><div class="where">${esc(r.where)}</div>
