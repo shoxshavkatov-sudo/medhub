@@ -11,6 +11,9 @@ window.ORGAN_INFO = {
   bladder:'Мышечный мешок: накапливает мочу (до 400–600 мл) и выводит её через уретру.'
 };
 /* MedHub — simulators: body map SVG, WebAudio auscultation, ECG renderer, atlas schematics */
+/* перевод: tz() и t() из app.js / i18n.js (если ещё не загружены — русский текст) */
+const simTz = s => (window.tz ? window.tz(s) : s);
+const simT = (k, ru) => (window.t ? window.t(k) : ru);
 
 /* ================= 1. BODY MAP (real 3D body photo + zone overlay) ================= */
 window.BodyMap = (function(){
@@ -21,7 +24,7 @@ window.BodyMap = (function(){
     for (const z of window.PAIN_ZONES){
       const p = pos[z.id]; if (!p) continue;
       if (only && z.id !== only) continue;
-      pts.push({id:z.id, label:z.n, u:p[0], v:p[1]});
+      pts.push({id:z.id, label:simTz(z.n), u:p[0], v:p[1]});
     }
     return pts;
   }
@@ -29,17 +32,17 @@ window.BodyMap = (function(){
     const pts = pointsFor(mode, only);
     if (window.Body3D && pts.length){
       return `<div class="body3d-box"><div class="body3d" data-bm3d="${mode}" data-only="${only||''}"></div>
-        <div class="body3d-bar">${ic3dHint()}<label class="xray-lbl"><input type="range" min="15" max="100" value="100" class="xray-range"> <span data-i18n="xray"></span></label></div></div>`;
+        <div class="body3d-bar">${ic3dHint()}<label class="xray-lbl"><input type="range" min="15" max="100" value="100" class="xray-range"> ${simT('cat_xray', 'Рентген')}</label></div></div>`;
     }
     let dots = '';
     for (const z of window.PAIN_ZONES){
       const p = (window.PAIN_POS[mode]||{})[z.id]; if (!p) continue;
       if (only && z.id !== only) continue;
-      dots += `<button class="zone-dot" data-zone="${z.id}" style="left:${p[0]}%;top:${p[1]}%" title="${z.n}" aria-label="${z.n}"></button>`;
+      dots += `<button class="zone-dot" data-zone="${z.id}" style="left:${p[0]}%;top:${p[1]}%" title="${simTz(z.n)}" aria-label="${simTz(z.n)}"></button>`;
     }
     return `<div class="body-photo"><img src="${BASE[mode]}" alt="" draggable="false">${dots}</div>`;
   }
-  function ic3dHint(){ return '<span class="body3d-hint">Вращайте мышью · колесо — зум · тыкайте в точки</span>'; }
+  function ic3dHint(){ return '<span class="body3d-hint">' + simT('body3d_hint', 'Вращайте мышью · колесо — зум · тыкайте в точки') + '</span>'; }
   function bind(container, onZone){
     const box = container.querySelector('[data-bm3d]');
     if (box && window.Body3D){
@@ -517,5 +520,5 @@ function earBase(c,w,h,inflamed){
 function label(c,w,h,txt,x,y){
   c.font = `${Math.max(11,w*0.028)}px sans-serif`;
   c.textAlign='center'; c.fillStyle='rgba(232,245,233,0.92)';
-  c.fillText(txt, w*x, h*y);
+  c.fillText(simTz(txt), w*x, h*y);
 }
