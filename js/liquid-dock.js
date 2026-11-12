@@ -91,7 +91,7 @@ let root = null, bar, base, fil, thumb, lens, tabsEl, clone, defs, tabs = [], cl
 let N = 0, TW = 273, THW = 252, PAD = 12, BW = 843, U = .46, labels = [], itemsKey = '', onSelect = null, lastLow = null;
 let dirv = 1, cur = 0, vel = 0, target = 0, press = 0, pvel = 0, down = false, grab = 0, active = -1, hi = -2;
 let pRaw = 0, pT = 0, pV = 0, mv = 0, mvv = 0, zz = 0, zzv = 0, wasMoving = false, lag = 0, lagv = 0;
-let running = false, last = 0, rt = 0;
+let running = false, last = 0, rt = 0, EDGE = 48;   // EDGE — насколько капля может выступить за бар (u)
 
 /* ---------- геометрия под N вкладок и ширину экрана ---------- */
 const measure = document.createElement('canvas').getContext('2d');
@@ -109,6 +109,7 @@ function layout(){
     PAD = Math.max(12, 12.5 - (TW - THW) / 2);
   }
   BW = N * TW + 2 * PAD;
+  EDGE = Math.max(6, Math.min(48, ((vw - BW * U) / 2 - 2) / U));   // выступ капли не заходит за край экрана
   const s = bar.style;
   s.setProperty('--u', U.toFixed(5) + 'px');
   s.setProperty('--tw', TW.toFixed(3)); s.setProperty('--thw', THW.toFixed(3));
@@ -179,9 +180,12 @@ function ptr(e){
   const rc = tabsEl.getBoundingClientRect(), w = TW * U;
   return (e.clientX - rc.left - PAD * U) / w;
 }
+/* мягкий упор у краёв: капля выходит за крайнюю вкладку не больше чем на OVER вкладки,
+   как бы далеко ни увели палец или мышь (раньше было raw × 0.3 без предела — капля улетала за бар) */
+const OVER = .3, give = o => OVER * (1 - Math.exp(-o / OVER));
 function place(p, now){
   const raw = p - .5 - grab;
-  target = raw < 0 ? raw * .3 : raw > N - 1 ? N - 1 + (raw - (N - 1)) * .3 : raw;   // сопротивление у краёв
+  target = raw < 0 ? -give(-raw) : raw > N - 1 ? N - 1 + give(raw - (N - 1)) : raw;
   if (pT){ const dt = Math.max(.008, (now - pT) / 1000); pV += ((raw - pRaw) / dt - pV) * .35; }
   pRaw = raw; pT = now;
   highlight(clamp(Math.round(raw), 0, N - 1));
@@ -196,6 +200,15 @@ function bindPointer(){
     place(p, e.timeStamp);
   });
   bar.addEventListener('pointermove', e => { if (down) place(ptr(e), e.timeStamp); });
+  /* перетаскивание прервано (окно потеряло фокус, вкладку свернули, захват указателя потерян) —
+     капля возвращается на текущую вкладку, а не остаётся «зажатой» */
+  const cancel = () => {
+    if (!down) return; down = false; bar.classList.remove('down');
+    pV = 0; target = active >= 0 ? active : clamp(Math.round(pRaw), 0, N - 1); select(active, false); kick();
+  };
+  bar.addEventListener('lostpointercapture', cancel);      // после обычного pointerup down уже false — ничего не делает
+  window.addEventListener('blur', cancel);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) cancel(); });
   ['pointerup', 'pointercancel'].forEach(n => bar.addEventListener(n, e => {
     if (!down) return; down = false; bar.classList.remove('down');
     if (e.timeStamp - pT > 90) pV = 0;                    // палец стоял — инерции нет
@@ -239,6 +252,10 @@ function frame(now){
     pvel += (-pk * (press - (down ? 1 : 0)) - pc * pvel) * h; press += pvel * h;
     lagv += (-180 * (lag - cur) - 2 * Math.sqrt(180) * lagv) * h; lag += lagv * h;   // «отстающее» тело капли
   }
+  /* страховка: капля физически не уходит дальше чем на полвкладки за края бара */
+  const lo = -.5, hiX = Math.max(0, N - 1) + .5;
+  if (cur < lo || cur > hiX){ cur = clamp(cur, lo, hiX); vel = 0; }
+  lag = clamp(lag, lo - .3, hiX + .3);
   const vs = TW / 273, vn = vel * vs;          // скорость в «вкладках набора»: одно ощущение при любой ширине вкладки
   const moving = Math.abs(cur - target) > .1 || Math.abs(vn) > .9;
   if (wasMoving && !moving && !down) zzv -= 2.4;            // приземление: капля сплющивается и возвращается
@@ -255,7 +272,7 @@ function frame(now){
   const s = 1 + .05 * g + .06 * press, sy = 1 + .24 * g + .16 * press;
   const sm = (v, m, K) => v <= m - K ? v : m - K * Math.exp(-(v - (m - K)) / K);
   const cx = PAD + cur * TW + TW / 2;
-  const horiz = w => [-sm(-(cx - w / 2), 48, 30), sm(cx + w / 2, BW + 48, 30)];
+  const K = Math.min(30, EDGE * .8), horiz = w => [-sm(-(cx - w / 2), EDGE, K), sm(cx + w / 2, BW + EDGE, K)];
   if (Math.abs(vel) > .6) dirv = Math.sign(vel);
   const jel = clamp((cur - lag) * dirv * vs, -.55, .55);   // «желе» хвоста
   let sxv = s * (1 + st) * (1 + .48 * jel) * (1 - .45 * zz), syv = sy * (1 + zz);
