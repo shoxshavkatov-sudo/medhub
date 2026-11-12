@@ -81,8 +81,23 @@ h2{font-size:1.35rem} h3{font-size:1.05rem}
 /* оценки по 100-балльной шкале */
 .gchip{white-space:nowrap;font-variant-numeric:tabular-nums}
 .gchip i{font-style:normal;opacity:.75}
+[data-theme="night"] .gchip.ok{background:color-mix(in srgb,#9cc46a 18%,transparent);color:#a9cf78}   /* в ночной теме accent2 ≈ warn — «4–5» отдельным цветом */
 .g-band{font-size:.8rem;margin-top:5px;min-height:1.2em}
 .g-scale{font-size:.8rem;margin:2px 0 10px}
+.gtable td{vertical-align:middle}
+.gtable .nw{white-space:nowrap}
+.gtable .g-act{width:1%;white-space:nowrap;text-align:right}
+.gtable .g-act .icon-btn{width:32px;height:32px;display:inline-grid;place-items:center;padding:0;vertical-align:middle}
+.gtable .g-act .icon-btn+.icon-btn{margin-left:6px}
+.gtable .g-act .ic{width:16px;height:16px}
+.gtable .g-del:hover{color:var(--danger);border-color:var(--danger)}
+.gtable .g-meta{display:none;font-size:.76rem;margin-top:2px}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (max-width:520px){
+  .gtable .g-c,.gtable .g-cr,.gtable .g-d{display:none}
+  .gtable .g-meta{display:block}
+  .gtable td,.gtable th{padding:8px 6px}
+}
 .badge{display:inline-block;padding:3px 10px;border-radius:99px;background:var(--panel2);font-size:.76rem;font-weight:600}
 .badge.ok{background:color-mix(in srgb,var(--accent2) 22%,transparent);color:var(--accent2)}
 .badge.warn{background:color-mix(in srgb,var(--warn) 20%,transparent);color:var(--warn)}
