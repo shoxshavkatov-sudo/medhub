@@ -77,6 +77,12 @@ h2{font-size:1.35rem} h3{font-size:1.05rem}
 .stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;box-shadow:var(--shadow)}
 .stat .num{font-size:1.6rem;font-weight:800;color:var(--accent)}
 .stat .lbl{font-size:.78rem;color:var(--muted)}
+.stat .num small{font-size:.8rem;font-weight:600;color:var(--muted);margin-left:2px}
+/* оценки по 100-балльной шкале */
+.gchip{white-space:nowrap;font-variant-numeric:tabular-nums}
+.gchip i{font-style:normal;opacity:.75}
+.g-band{font-size:.8rem;margin-top:5px;min-height:1.2em}
+.g-scale{font-size:.8rem;margin:2px 0 10px}
 .badge{display:inline-block;padding:3px 10px;border-radius:99px;background:var(--panel2);font-size:.76rem;font-weight:600}
 .badge.ok{background:color-mix(in srgb,var(--accent2) 22%,transparent);color:var(--accent2)}
 .badge.warn{background:color-mix(in srgb,var(--warn) 20%,transparent);color:var(--warn)}

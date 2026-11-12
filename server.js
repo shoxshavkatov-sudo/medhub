@@ -134,6 +134,7 @@ app.post('/api/groups/:code/grades', (req, res) => {
   if (!b.subject || !b.grade) return res.status(400).json({ error: 'subject and grade required' });
   const rec = { id: nowId(), memberId: String(b.memberId || ''), authorName: String(b.authorName || '').slice(0, 40),
     subject: String(b.subject).slice(0, 80), course: +b.course || 1, grade: +b.grade, cred: +b.cred || null,
+    scale: +b.scale === 100 ? 100 : null,
     date: String(b.date || '').slice(0, 10), ts: Date.now() };
   g.grades = g.grades || [];
   g.grades.push(rec);
