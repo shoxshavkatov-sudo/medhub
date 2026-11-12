@@ -730,13 +730,27 @@ ROUTES.grades.after = function(){
   const gi = $('#g-grade'), gb = $('#g-band');
   if (gi && gb) gi.oninput = () => { const v = +gi.value, ok = gi.value.trim() !== '' && v >= 0 && v <= 100;
     gb.innerHTML = ok ? `= <b>«${gBand(v)[1]}»</b> ${t('band_'+gBand(v)[1])}` : (gi.value.trim() ? t('grade_invalid') : ''); };
-  $$('[data-del]').forEach(b=>b.onclick=()=>{ S.grades = S.grades.filter(g=>g.id!==b.dataset.del); save(); go('grades'); });
+  /* кнопки «изменить» и «удалить» — только у своих оценок (S.grades); групповые записи — только просмотр */
+  const mine = id => S.grades.some(g => g.id === id);
   function gradeTable(rows){
-    return `<div class="table-wrap"><table><thead><tr><th>${t('subject')}</th><th>${t('course')}</th><th>${t('grade')}</th><th>${t('credits')}</th><th>${t('date')}</th></tr></thead>
+    return `<div class="table-wrap"><table class="gtable"><thead><tr><th>${t('subject')}</th><th class="g-c">${t('course')}</th><th>${t('grade')}</th><th class="g-cr">${t('credits')}</th><th class="g-d">${t('date')}</th><th class="g-act"><span class="sr-only">${t('edit')}</span></th></tr></thead>
     <tbody>${rows.slice().sort((a,b)=>(b.ts||0)-(a.ts||0)).map(g=>`
-      <tr><td>${esc(g.subject)}</td><td>${t('course'+(g.course||1))}</td><td>${gChip(gv(g))}</td><td>${g.cred||'—'}</td><td>${g.date||''}</td></tr>`).join('') ||
-      `<tr><td colspan="5" class="muted">${t('empty')}</td></tr>`}</tbody></table></div>`;
+      <tr><td>${esc(g.subject)}<div class="g-meta muted">${t('course'+(g.course||1))}${g.cred?` · ${g.cred} ECTS`:''}${g.date?` · <span class="nw">${esc(g.date)}</span>`:''}</div></td>
+        <td class="g-c">${t('course'+(g.course||1))}</td><td>${gChip(gv(g))}</td><td class="g-cr">${g.cred||'—'}</td><td class="g-d">${esc(g.date||'')}</td>
+        <td class="g-act">${mine(g.id) ? `<button class="icon-btn" data-gedit="${esc(g.id)}" title="${esc(t('edit'))}" aria-label="${esc(t('edit'))}">${ic('pen')}</button>
+          <button class="icon-btn g-del" data-gdel="${esc(g.id)}" title="${esc(t('delete'))}" aria-label="${esc(t('delete'))}">${ic('trash')}</button>` : ''}</td></tr>`).join('') ||
+      `<tr><td colspan="6" class="muted">${t('empty')}</td></tr>`}</tbody></table></div>`;
   }
+  /* таблица дорисовывается асинхронно — слушаем клики на контейнере */
+  const tbox = $('#g-tables');
+  if (tbox) tbox.onclick = e => {
+    const ed = e.target.closest('[data-gedit]'), del = e.target.closest('[data-gdel]');
+    if (ed) return editGradeDialog(ed.dataset.gedit);
+    if (del){
+      if (!confirm(t('confirm_delete'))) return;
+      S.grades = S.grades.filter(g => g.id !== del.dataset.gdel); save(); toast(t('deleted')); go('grades');
+    }
+  };
   (async ()=>{
     const box = $('#g-tables'); if (!box) return;
     if (!S.group){ box.innerHTML = gradeTable(S.grades); return; }
@@ -784,6 +798,37 @@ ROUTES.grades.after = function(){
       ctx.font='13px sans-serif'; ctx.textAlign='center'; ctx.fillText(t('empty'), w/2, h/2); }
   }
 };
+
+/* изменить свою оценку: предмет, балл 0–100, кредиты, дата */
+function editGradeDialog(id){
+  const g = S.grades.find(x => x.id === id); if (!g) return;
+  const d = dlg(`<h3>${ic('pen')} ${t('edit_grade')}</h3>
+    <label class="f">${t('subject')}</label><select id="ge-sub">${window.SUBJECTS.map(s=>
+      `<option value="${esc(s.n)}" data-c="${s.c}"${s.n===g.subject?' selected':''}>${t('course'+s.c)} — ${esc(s.n)}</option>`).join('')}</select>
+    <label class="f">${t('grade')} (0–100)</label><input type="number" id="ge-grade" min="0" max="100" step="1" inputmode="decimal" value="${gFmt(gv(g))}">
+    <div class="g-band muted" id="ge-band"></div>
+    <div class="formrow g2">
+      <div><label class="f">${t('credits')}</label><input type="number" id="ge-cred" min="1" max="12" value="${g.cred||''}"></div>
+      <div><label class="f">${t('date')}</label><input type="date" id="ge-date" value="${esc(g.date||'')}"></div>
+    </div>
+    <p style="display:flex;gap:10px;margin-top:14px"><button class="btn" id="ge-ok">${t('save')}</button>
+    <button class="btn secondary" data-close>${t('cancel')}</button></p>`);
+  const sub = d.querySelector('#ge-sub'), gi = d.querySelector('#ge-grade'), gb = d.querySelector('#ge-band');
+  /* предмета нет в списке (старое название) — оставляем его первым вариантом */
+  if (!sub.value || sub.value !== g.subject){
+    const o = document.createElement('option'); o.value = g.subject; o.textContent = g.subject; o.dataset.c = g.course || 1; o.selected = true; sub.prepend(o);
+  }
+  const hint = () => { const v = +gi.value, ok = gi.value.trim() !== '' && v >= 0 && v <= 100;
+    gb.innerHTML = ok ? `= <b>«${gBand(v)[1]}»</b> ${t('band_'+gBand(v)[1])}` : (gi.value.trim() ? t('grade_invalid') : ''); };
+  gi.oninput = hint; hint();
+  d.querySelector('#ge-ok').onclick = () => {
+    const raw = gi.value.trim(), grade = Math.round(+raw * 10) / 10;
+    if (raw === '' || !(grade >= 0 && grade <= 100)) return toast(t('grade_invalid'));
+    Object.assign(g, {subject: sub.value, course: +sub.selectedOptions[0].dataset.c || g.course || 1, grade, scale: 100,
+      cred: +d.querySelector('#ge-cred').value || null, date: d.querySelector('#ge-date').value || g.date || todayISO()});
+    save(); d.close(); toast(t('saved')); go('grades');
+  };
+}
 
 /* ---------- 2. CALENDAR ---------- */
 let calMonth = new Date();
