@@ -70,6 +70,7 @@ h2{font-size:1.35rem} h3{font-size:1.05rem}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow);margin-bottom:14px}
 .card.tight{padding:10px 12px}
 .grid{display:grid;gap:14px}
+.grid.stats{margin-bottom:14px}     /* ряд счётчиков не прилипает к карточке ниже */
 .g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}
 .page-head{margin-bottom:14px}
 .page-head p{margin:.2em 0 0;color:var(--muted);font-size:.9rem}

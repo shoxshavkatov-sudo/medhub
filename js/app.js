@@ -661,7 +661,7 @@ ROUTES.grades = function(){
   for (let c=1;c<=6;c++){ const arr = S.grades.filter(g=>g.course===c);
     byCourse[c] = arr.length ? arr.reduce((a,g)=>a+g.grade,0)/arr.length : null; }
   return head(t('nav_grades'), t('grades_hint')) + `
-  <div class="grid g4">
+  <div class="grid stats g4">
     <div class="stat"><div class="num">${gpa?gpa.toFixed(2):'—'}</div><div class="lbl">${t('gpa')}</div></div>
     <div class="stat"><div class="num">${S.grades.length}</div><div class="lbl">${t('total')} ${t('grade').toLowerCase()}</div></div>
     <div class="stat"><div class="num">${[...new Set(S.grades.map(g=>g.subject))].length}</div><div class="lbl">${t('subject')}</div></div>
@@ -1974,7 +1974,7 @@ function dueCards(){ const t0 = todayISO();
 ROUTES.cards = function(){
   const due = dueCards();
   return head(t('nav_cards'), t('cards_hint')) + `
-  <div class="grid g3">
+  <div class="grid stats g3">
     <div class="stat"><div class="num">${due.length}</div><div class="lbl">${t('cards_due')}</div></div>
     <div class="stat"><div class="num">${S.cards.length}</div><div class="lbl">${t('total')} · ${[...new Set(S.cards.map(c=>c.deck))].length} ${t('cards_deck')}</div></div>
     <div class="stat"><div class="num">${S.streak||0}</div><div class="lbl">${ic('flame')} ${t('cards_streak')}</div></div>
@@ -2123,7 +2123,7 @@ ROUTES.skills = function(){
   const done = Object.values(S.skills).filter(v=>v===2).length;
   const pct = Math.round(done/window.SKILLS.length*100);
   return head(t('nav_skills'), t('skills_hint')) + `
-  <div class="grid g2">
+  <div class="grid stats g2">
     <div class="stat"><div class="num">${done}/${window.SKILLS.length}</div><div class="lbl">${t('skills_mine')}</div>
       <div class="progressbar" style="margin-top:8px"><div style="width:${pct}%"></div></div></div>
     <div class="stat"><div class="num">${done}/${window.SKILLS.length}</div><div class="lbl">PDF</div>
