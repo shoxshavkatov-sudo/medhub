@@ -274,7 +274,7 @@ const DOCK = [
  {key:'search', lbl:{ru:'Поиск', uz:'Qidiruv', en:'Search'}, icon:'search', first:'search',
   items:[['search','nav_search']]},
  {key:'ref', lbl:{ru:'Справка', uz:'Ma’lumot', en:'Ref'}, icon:'ref', first:'icd',
-  items:[['icd','nav_icd'],['drugs','nav_drugs'],['labs','nav_labs'],['protocols','nav_protocols'],['calcs','nav_calc']]},
+  items:[['icd','nav_icd'],['drugs','nav_drugs'],['protocols','nav_protocols'],['glossary','nav_glossary'],['labs','nav_labs'],['calcs','nav_calc']]},
  {key:'sims', lbl:{ru:'Симуляторы', uz:'Simulyator', en:'Sims'}, icon:'sims', first:'pain',
   items:[['pain','nav_pain'],['auscult','nav_auscult'],['ecg','nav_ecg'],['atlas','nav_atlas'],]},
  {key:'board', lbl:{ru:'Доска', uz:'Doska', en:'Board'}, icon:'board', first:'board',
@@ -323,6 +323,7 @@ document.addEventListener('click', e=>{
 function go(route, arg){
   stopSims();
   try{ Board.unmount(); }catch(_e){}
+  try{ Gloss.hide(); }catch(_e){}
   currentRoute = route;
   $$('#nav .nav-item').forEach(b=>b.classList.toggle('active', b.dataset.route===route));
   const fn = ROUTES[route];
@@ -1008,6 +1009,7 @@ ROUTES.search.after = function(q){
   $('#s-in').addEventListener('keydown', e=>{ if(e.key==='Enter') run(); });
   if (q) run();
   if (!RefData.ready()) RefData.load().then(() => { if ($('#s-in') && $('#s-in').value.trim()) run(); });
+  if (!window.GLOSSARY) Gloss.load().then(() => { if ($('#s-in') && $('#s-in').value.trim()) run(); });
   function run(){
     const q = $('#s-in').value.trim(); const box = $('#s-results');
     if (!q){ box.innerHTML=''; return; }
@@ -1040,6 +1042,8 @@ ROUTES.search.after = function(q){
         res.push({where:t('nav_labs'), title:l.a, sub:`${l.m||''} ${l.f&&l.f!==l.m?'| '+l.f:''}`, route:'labs'});
       for (const p of allProtocols()) if ((p.t+' '+p.cat+' '+(p.uz&&p.uz.t||'')).toLowerCase().includes(ql))
         res.push({where:t('nav_protocols'), title:p.t, sub:p.cat, route:'protocols', arg:p.t});
+      for (const v of (window.GLOSSARY ? Gloss.groups().flatMap(g => g.items) : [])) if (v.keys.toLowerCase().includes(ql))
+        res.push({where:t('nav_glossary'), title:v.t, sub:v.d.length > 110 ? v.d.slice(0,110)+'…' : v.d, route:'glossary', arg:v.t});
       for (const c of window.CALCS) if (c.n.toLowerCase().includes(ql))
         res.push({where:t('nav_calc'), title:c.n, sub:'', route:'calcs'});
       for (const z of window.PAIN_ZONES) if ((z.n+' '+z.causes).toLowerCase().includes(ql))
@@ -1142,6 +1146,7 @@ const Ref = (function(){
         <summary>${g.tag ? `<span class="ref-gt">${esc(g.tag)}</span>` : ''}<span class="ref-gn">${mark(g.title, tt)}</span>
           ${g.range ? `<span class="ref-gr">${esc(g.range)}</span>` : ''}<span class="ref-gc">${items.length}</span></summary>
         <div class="ref-items">${items.map(([it, sn]) => opt.row(it, tt, openItems, sn)).join('')}</div></details>`).join('');
+    if (typeof Gloss !== 'undefined') Gloss.watch(box);
   }
   /* поле поиска: ввод с задержкой, Esc очищает */
   function bind(input, draw){
@@ -1382,6 +1387,159 @@ const PROTO_CATS = [
 const protoCatTitle = cat => { const c = PROTO_CATS.find(x => x[0] === cat); return c ? (S.lang === 'uz' ? c[1] : S.lang === 'en' ? c[2] : c[0]) : cat; };
 const allProtocols = () => (window.PROTOCOLS || []).concat(window.PROTOCOLS_MORE || []);
 /* единый вид протокола на текущем языке: поля sign/next — в объекте или в PROTOCOL_EXTRA; узбекский — p.uz или PROTOCOL_UZ */
+/* ---------- Глоссарий: подчёркнутые термины с определением по нажатию (js/glossary.js, по требованию) ---------- */
+const GLOSS_V = '20261112a';
+const GLOSS_CATS = [
+ ['abbr', {ru:'Сокращения', uz:'Qisqartmalar', en:'Abbreviations'}],
+ ['sym', {ru:'Симптомы и синдромы', uz:'Simptom va sindromlar', en:'Symptoms & syndromes'}],
+ ['dx', {ru:'Диагностика и анализы', uz:'Diagnostika va tahlillar', en:'Diagnostics & tests'}],
+ ['tx', {ru:'Лечение и фармакология', uz:'Davolash va farmakologiya', en:'Treatment & pharmacology'}],
+ ['gen', {ru:'Общие понятия', uz:'Umumiy tushunchalar', en:'General concepts'}]
+];
+const Gloss = (function(){
+  let p = null, re = null;
+  function load(){
+    if (window.GLOSSARY) return Promise.resolve();
+    if (!p) p = new Promise(res => { const s = document.createElement('script');
+      s.src = ASSET_BASE + 'js/glossary.js?v=' + GLOSS_V; s.onload = s.onerror = () => res(); document.head.appendChild(s); });
+    return p;
+  }
+  const all = () => window.GLOSSARY || [];
+  const keys = k => String(k || '').split('|').map(x => x.trim()).filter(Boolean);
+  const uz = () => S.lang === 'uz';
+  const title = g => ((uz() && keys(g.ku)[0]) || keys(g.k)[0] || '').replace(/\*/g, '');
+  const def = g => (uz() && g.du) || g.d || '';
+  const catTitle = c => { const x = GLOSS_CATS.find(([k]) => k === c); return x ? Ref.L(x[1]) : ''; };
+  /* ключ → атомы регулярки: * — окончание слова, пробел — любые пробелы;
+     сокращения ЗАГЛАВНЫМИ — строго с учётом регистра, у остальных первая буква любого регистра */
+  function atoms(k){
+    const letters = k.replace(/[^\p{L}]/gu, '');
+    const caps = letters && letters === letters.toUpperCase() && letters !== letters.toLowerCase();
+    return [...k].map((ch, i) => ch === '*' ? "[\\p{L}'’]*" : /\s/.test(ch) ? '\\s+'
+      : i === 0 && !caps && ch.toLowerCase() !== ch.toUpperCase() ? '[' + ch.toLowerCase() + ch.toUpperCase() + ']'
+      : ch.replace(/[.+?^${}()|[\]\\]/g, '\\$&'));
+  }
+  /* все ключи — одним префиксным деревом: на каждой позиции проверяется одна ветка, а не ~2000 вариантов */
+  function trie(list){
+    const root = {};
+    for (const a of list){ let n = root; for (const x of a) n = n[x] || (n[x] = {}); n[''] = 1; }
+    /* порядок веток: длинные фразы раньше коротких, «любое окончание» — последним (иначе «отёк» съест «отёк лёгких») */
+    const W = "[\\p{L}'’]*", D = new Map();
+    const dep = n => { if (D.has(n)) return D.get(n); const d = Math.max(0, ...Object.keys(n).filter(k => k !== '').map(k => 1 + dep(n[k]))); D.set(n, d); return d; };
+    const gen = n => { const ks = Object.keys(n).filter(k => k !== '').sort((x, y) => (x === W) - (y === W) || dep(n[y]) - dep(n[x])); if (!ks.length) return '';
+      const alts = ks.map(k => k + gen(n[k]));
+      return alts.length === 1 && !n[''] ? alts[0] : '(?:' + alts.join('|') + ')' + (n[''] ? '?' : ''); };
+    return gen(root);
+  }
+  const norm = x => x.toLowerCase().replace(/\s+/g, ' ');
+  let exact = new Map(), stems = new Map(), rest = [];
+  function build(){
+    if (re || !all().length) return;
+    const list = [];
+    all().forEach((g, i) => { for (const k of keys(g.k).concat(keys(g.ku))) if (k.replace(/\*/g, '').length >= 2) list.push([k, i]); });
+    for (const [k, i] of list){
+      const stars = (k.match(/\*/g) || []).length;
+      if (!stars){ if (!exact.has(norm(k))) exact.set(norm(k), i); }
+      else if (stars === 1 && k.endsWith('*')){ const st = norm(k.slice(0, -1)); if (!stems.has(st)) stems.set(st, i); }
+      else rest.push([new RegExp('^' + atoms(k).join('') + '$', 'u'), i]);
+    }
+    re = new RegExp("(?<![\\p{L}\\p{N}'’])" + trie(list.map(([k]) => atoms(k))) + "(?![\\p{L}\\p{N}'’])", 'gu');
+  }
+  /* найденный текст → номер термина */
+  function owner(str){
+    const n = norm(str);
+    if (exact.has(n)) return exact.get(n);
+    for (let L = n.length; L >= 2; L--){ const e = stems.get(n.slice(0, L)); if (e != null) return e; }
+    for (const [r, e] of rest) if (r.test(str)) return e;
+    return null;
+  }
+  /* подчеркнуть термины в блоке: каждый — один раз, свой термин (в самом глоссарии) — нет */
+  function apply(root){
+    if (!root || root.dataset.gl || !re) return;
+    root.dataset.gl = '1';
+    const host = root.closest('[data-gi]'), self = host ? +host.dataset.gi : -1, used = new Set([self]);
+    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {acceptNode: n =>
+      n.parentElement && n.parentElement.closest('.gl, a, button, summary, .icd-links, h4') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT});
+    const nodes = []; while (w.nextNode()) nodes.push(w.currentNode);
+    for (const node of nodes){
+      const txt = node.nodeValue; if (!txt || txt.length < 2) continue;
+      let m, last = 0, frag = null; re.lastIndex = 0;
+      while ((m = re.exec(txt))){
+        const e = owner(m[0]);
+        if (e == null || used.has(e)) continue;
+        used.add(e);
+        frag = frag || document.createDocumentFragment();
+        frag.append(txt.slice(last, m.index));
+        const sp = document.createElement('span');
+        sp.className = 'gl'; sp.dataset.gl = e; sp.tabIndex = 0; sp.setAttribute('role', 'button'); sp.textContent = m[0];
+        frag.append(sp); last = m.index + m[0].length;
+      }
+      if (frag){ frag.append(txt.slice(last)); node.replaceWith(frag); }
+    }
+  }
+  const bodies = d => d.matches('.ref-item') ? d.querySelectorAll(':scope > .ref-body') : d.querySelectorAll('.gl-row > .ref-body');
+  function scan(d){ load().then(() => { build(); requestAnimationFrame(() => bodies(d).forEach(apply)); }); }
+  /* следит за списком справки: открыли карточку или группу — подчёркиваем термины */
+  function watch(box){
+    if (!box._gl){ box._gl = 1;
+      box.addEventListener('toggle', e => { const d = e.target; if (d.open && d.matches && d.matches('.ref-item, .ref-grp')) scan(d); }, true); }
+    box.querySelectorAll('.ref-item[open], .ref-grp[open]').forEach(scan);
+  }
+  /* всплывающее определение */
+  function hide(){ const pop = $('#gl-pop'); if (pop) pop.remove(); }
+  function show(el){
+    const g = all()[+el.dataset.gl]; if (!g) return;
+    hide();
+    const pop = document.createElement('div');
+    pop.id = 'gl-pop'; pop.className = 'gl-pop'; pop.setAttribute('role', 'dialog');
+    pop.innerHTML = `<div class="gl-pop-h"><b>${esc(title(g))}</b><span class="gl-pop-c">${esc(catTitle(g.c))}</span>
+      <button type="button" class="gl-x" aria-label="${esc(t('close'))}">×</button></div>
+      <p>${esc(def(g))}</p><a href="#" class="gl-more">${ic('book')} ${esc(t('gl_all'))} →</a>`;
+    document.body.appendChild(pop);
+    const r = el.getBoundingClientRect(), vw = document.documentElement.clientWidth, vh = innerHeight;
+    const pw = pop.offsetWidth, ph = pop.offsetHeight, dock = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--dock-h')) || 80;
+    let left = Math.min(Math.max(8, r.left + r.width / 2 - pw / 2), vw - pw - 8), top = r.bottom + 8;
+    if (top + ph > vh - dock - 8) top = Math.max(8, r.top - ph - 8);
+    pop.style.left = left + 'px'; pop.style.top = top + 'px';
+    pop.querySelector('.gl-x').onclick = hide;
+    pop.querySelector('.gl-more').onclick = ev => { ev.preventDefault(); hide(); go('glossary', title(g)); };
+  }
+  document.addEventListener('click', e => {
+    const el = e.target.closest && e.target.closest('.gl');
+    if (el){ e.preventDefault(); show(el); return; }
+    if (!(e.target.closest && e.target.closest('#gl-pop'))) hide();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') hide();
+    else if ((e.key === 'Enter' || e.key === ' ') && e.target.classList && e.target.classList.contains('gl')){ e.preventDefault(); show(e.target); }
+  });
+  window.addEventListener('scroll', hide, true);
+  window.addEventListener('resize', hide);
+  /* группы для раздела «Глоссарий» */
+  function groups(){
+    const L = uz() ? 'uz' : 'ru';
+    return GLOSS_CATS.map(([key, nm]) => ({key, title: Ref.L(nm),
+      items: all().map((g, i) => ({i, c: g.c, t: title(g), d: def(g), keys: keys(g.k).concat(keys(g.ku)).join(' ').replace(/\*/g, '')}))
+        .filter(v => v.c === key).sort((a, b) => a.t.localeCompare(b.t, L))})).filter(g => g.items.length);
+  }
+  return {load, watch, groups, hide, count: () => all().length};
+})();
+
+ROUTES.glossary = function(arg){
+  return head(t('nav_glossary'), t('gl_hint')) + Ref.searchBox('gl-q', t('ref_ph_gl'), arg) + `
+  <div id="gl-list" class="ref-list"><p class="muted">${t('loading')}</p></div>`;
+};
+ROUTES.glossary.after = function(){
+  const input = $('#gl-q'), box = $('#gl-list');
+  const draw = () => { if (!window.GLOSSARY) return; Ref.render(box, Gloss.groups(), input.value, {
+    hay: v => v.t + ' ' + v.keys,
+    fields: v => [[t('gl_def'), v.d]],
+    row: (v, tt) => `<div class="ref-item gl-row" data-gi="${v.i}"><div class="ref-body"><b class="gl-t">${Ref.mark(v.t, tt)}</b> — ${Ref.mark(v.d, tt)}</div></div>`
+  }); };
+  Ref.bind(input, draw);
+  Gloss.load().then(() => { if (!window.GLOSSARY) box.innerHTML = `<div class="empty">${t('ref_none')}</div>`; else draw(); });
+};
+
 function protoView(p){
   const X = (window.PROTOCOL_EXTRA || {})[p.t] || [];
   const v = {ruT: p.t, t: p.t, cat: p.cat, diff: p.diff || [], steps: p.steps || [], red: p.red || '', sign: p.sign || X[0] || '', next: p.next || X[1] || ''};
