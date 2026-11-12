@@ -332,7 +332,7 @@ uz: {
   duty_place_ph: "Qabul bo'limi, RITB, terapiya…", group_name_ph: "Davolash ishi, 4-kurs, 12-guruh", sync_key_ph: "mening-kalitim-2026",
   sync_note: "Kalit bo'yicha sinxronlash: boshqa qurilmada xuddi shu kalit ma'lumotlarni yuklab oladi.",
   offline_note: "MKB, dorilar, me'yorlar, protokollar, kalkulyatorlar, testlar va keyslar ilovaga o'rnatilgan va internetsiz ishlaydi. Keshni mustahkamlash uchun bosing.",
-  static_note: "<b>Statik rejim</b>: sayt serversiz joylashtirilgan, shuning uchun guruhlar, lentalar va sinxronlash faqat shu brauzerda saqlanadi. Qurilmalar o'rtasida almashish uchun Node-versiyani joylashtiring (README → «Вариант Б») yoki <code>npm start</code> ni ishga tushiring.",
+  static_note: "<b>Statik rejim</b>: sayt serversiz joylashtirilgan, shuning uchun guruhlar, lentalar va sinxronlash faqat shu brauzerda saqlanadi. Qurilmalar o'rtasida almashish uchun Node-versiyani joylashtiring (README, «B» varianti) yoki <code>npm start</code> ni ishga tushiring.",
   board_tip: "V/P/E/L/A/R/O/T/N — asboblar · Ctrl+Z / Ctrl+Y — bekor qilish / qaytarish · Delete — tanlanganini o'chirish · g'ildirak — surish · Ctrl+g'ildirak — masshtab · ikki marta bosish — matnni tahrirlash",
   web_books: "Google: PDF darsliklar", web_notes: "Google: konspektlar",
   err_group_gone: "Guruh serverda endi mavjud emas — yangisini yarating yoki kod bilan kiring",
