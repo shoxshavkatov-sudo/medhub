@@ -146,7 +146,7 @@ const rebuildSoon = () => { clearTimeout(rt); rt = setTimeout(rebuild, 80); };
 
 /* ---------- вкладки ---------- */
 const tabHTML = (it, i) => `<button class="ld-tab" type="button" data-i="${i}" aria-label="${esc(it.label)}">
-  <span class="ld-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${it.icon}</svg></span>
+  <span class="ld-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${it.icon}</svg>${it.badge ? `<b class="ld-badge">${esc(it.badge)}</b>` : ''}</span>
   <span class="ld-lbl">${esc(it.label)}</span></button>`;
 function setItems(items){
   N = items.length; labels = items.map(it => String(it.label));

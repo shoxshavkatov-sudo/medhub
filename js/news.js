@@ -60,8 +60,8 @@ addNews({
     en: `MedHub now has a News section`
   },
   text: {
-    uz: `Endi platformadagi barcha e'lonlar va yangiliklar shu yerda chiqadi. Yangi xabarlar yuqoridagi tugmada son bilan ko'rsatiladi.`,
-    ru: `Теперь все объявления и новости платформы будут публиковаться здесь. О новых записях подскажет счётчик на кнопке вверху.`,
-    en: `All platform announcements and news will be posted here. The counter on the top button shows unread posts.`
+    uz: `Endi platformadagi barcha e'lonlar va yangiliklar shu yerda chiqadi. Yangi xabarlar soni pastki paneldagi «Yangilik» tugmasida ko'rsatiladi.`,
+    ru: `Теперь все объявления и новости платформы будут публиковаться здесь. О новых записях подскажет счётчик на вкладке «Новости» в нижней панели.`,
+    en: `All platform announcements and news will be posted here. The counter on the News tab in the bottom bar shows unread posts.`
   },
 });
