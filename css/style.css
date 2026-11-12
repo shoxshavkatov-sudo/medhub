@@ -491,6 +491,24 @@ html{scroll-behavior:smooth}
 .ref-cl{font-size:.78rem;color:var(--muted)}
 .ref-body{padding:4px 12px 10px 30px;font-size:.87rem;line-height:1.5}
 .ref-body p{margin:.35em 0}
+/* глоссарий: подчёркнутые термины и всплывающее определение */
+.gl{border-bottom:1.5px dotted color-mix(in srgb,var(--accent) 75%,transparent);cursor:help;border-radius:3px;transition:background .15s}
+.gl:hover,.gl:focus-visible{background:color-mix(in srgb,var(--accent) 16%,transparent);outline:none}
+.gl-pop{position:fixed;z-index:90;width:min(340px,calc(100vw - 16px));box-sizing:border-box;padding:12px 14px 10px;border-radius:14px;
+  background:var(--panel);color:var(--text);border:1px solid var(--line);box-shadow:0 14px 36px rgba(0,0,0,.28);
+  font-size:.88rem;line-height:1.5;animation:glIn .14s ease-out}
+@keyframes glIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.gl-pop-h{display:flex;align-items:baseline;gap:8px;margin-bottom:4px}
+.gl-pop-h b{font-size:.98rem;color:var(--accent)}
+.gl-pop-c{flex:1;font-size:.72rem;color:var(--muted)}
+.gl-x{all:unset;cursor:pointer;font-size:1.25rem;line-height:1;color:var(--muted);padding:0 2px}
+.gl-x:hover{color:var(--text)}
+.gl-pop p{margin:0 0 8px}
+.gl-more{display:inline-flex;align-items:center;gap:5px;font-size:.8rem;font-weight:600;text-decoration:none}
+.gl-more .ic{width:14px;height:14px}
+.gl-row .ref-body{padding:7px 10px;border-radius:9px}
+.gl-row:hover .ref-body{background:var(--panel2)}
+.gl-row .gl-t{color:var(--accent)}
 .ref-body h4{margin:.7em 0 .2em;font-size:.82rem;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
 .ref-body .steps{margin:.2em 0;padding-left:1.2em}
 .ref-extra{margin-bottom:14px}

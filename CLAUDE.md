@@ -36,6 +36,10 @@ CDN Render (Cloudflare) кэширует файлы до часа и **не ра
 | `js/i18n.js` | строки RU / UZ / EN (`t(key)`, нет ключа → берётся `ru`). Новый ключ добавляй **во все три языка** |
 | `js/data.js`, `js/data2.js` | встроенные справочники: `ICD10`, `DRUGS`, `LABS`, `PROTOCOLS`, `CALCS`, `ECGS`, `ATLAS`… |
 | `js/icd-info.js` | краткая справка по кодам МКБ: `ICD_INFO["I21"] = "Суть|Клиника|Диагностика|Лечение"` (пустое поле пропускается) |
+| `js/ref-extra.js` | механизм и побочные для 78 препаратов `data.js`, признаки и «что дальше» для 12 протоколов |
+| `js/drugs-more.js` | ещё 131 препарат `{n, lat, cl, g, mech, ind, dose, contr, se, inter, preg, uz:{…}}` + `DRUG_UZ` (перевод препаратов `data.js`); грузится по требованию (`RefData`) |
+| `js/protocols-more.js` | ещё 69 протоколов + `PROTOCOL_UZ`; грузится по требованию (`RefData`) |
+| `js/glossary.js` | глоссарий: `e(категория, 'ключи RU', 'ключи UZ', 'определение RU', 'определение UZ')`; в справке термины подчёркиваются (`Gloss` в `js/app.js`), раздел «Глоссарий» |
 | `js/news.js` | новости: `addNews({date, title, text, image?, link?, pinned?})`; генератор кода — сайт с `?editor` |
 | `js/liquid-dock.js`, `css/liquid-dock.css` | нижняя панель «Liquid Glass» |
 | `css/style.css` | все остальные стили; цвета — переменные на `:root` и `[data-theme="dark"|"night"]` |
