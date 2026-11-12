@@ -1010,6 +1010,7 @@ ROUTES.search.after = function(q){
   if (q) run();
   if (!RefData.ready()) RefData.load().then(() => { if ($('#s-in') && $('#s-in').value.trim()) run(); });
   if (!window.GLOSSARY) Gloss.load().then(() => { if ($('#s-in') && $('#s-in').value.trim()) run(); });
+  if (S.lang === 'uz' && !window.ICD_UZ) IcdInfo.loadUz().then(() => { if ($('#s-in') && $('#s-in').value.trim()) run(); });
   function run(){
     const q = $('#s-in').value.trim(); const box = $('#s-results');
     if (!q){ box.innerHTML=''; return; }
@@ -1033,8 +1034,8 @@ ROUTES.search.after = function(q){
     }
     const res = [];
     if (scope === 'lib'){
-      for (const r of window.ICD10) if ((r.c+' '+r.ru+' '+r.en).toLowerCase().includes(ql))
-        res.push({where:'ICD-10', title:`${r.c} — ${r.ru}`, sub:r.en, route:'icd', arg:r.c});
+      for (const r of window.ICD10) if ((r.c+' '+r.ru+' '+r.en+' '+IcdInfo.name(r)).toLowerCase().includes(ql))
+        res.push({where:'ICD-10', title:`${r.c} — ${IcdInfo.name(r)}`, sub:r.en, route:'icd', arg:r.c});
       for (const d of allDrugs()){ const v = drugView(d);
         if ((v.n+' '+v.ruN+' '+v.ind+' '+v.cl).toLowerCase().includes(ql))
           res.push({where:t('nav_drugs'), title:v.n, sub:v.ind, route:'drugs', arg:v.n}); }
@@ -1199,7 +1200,7 @@ ROUTES.icd = function(arg){
   <div id="icd-list" class="ref-list"></div>
   <details class="ref-grp ref-extra"><summary><span class="ref-gt">11</span><span class="ref-gn">${t('icd11_title')} — ${t('ref_chapters')}</span><span class="ref-gc">${(window.ICD11_CHAPTERS||[]).length}</span></summary>
     <div class="ref-items"><p class="muted" style="font-size:.85rem;margin:6px 8px">${t('icd11_hint')}</p>
-      <div class="chiprow" style="margin:6px 8px">${(window.ICD11_CHAPTERS||[]).map(c=>`<span class="badge">${c[0]} ${esc(c[1])}</span>`).join('')}</div>
+      <div class="chiprow" style="margin:6px 8px">${(window.ICD11_CHAPTERS||[]).map(c=>`<span class="badge">${c[0]} ${esc(S.lang==='uz' && c[2] ? c[2] : c[1])}</span>`).join('')}</div>
       <p style="margin:6px 8px"><a href="https://icd.who.int/browse/2024-01/mms/ru" target="_blank" rel="noopener">WHO ICD-11 ↗</a></p></div>
   </details>`;
 };
@@ -1209,47 +1210,57 @@ ROUTES.icd.after = function(){
   const fill = () => box.querySelectorAll('details.ref-icd[open] > .ref-body:empty').forEach(b => { b.innerHTML = IcdInfo.html(b.dataset.c, b.dataset.n, tt); });
   const draw = () => { tt = Ref.terms(input.value); Ref.render(box, groups, input.value, {
     openUpTo: 3,
-    hay: r => r.c + ' ' + r.ru + ' ' + r.en,
+    hay: r => r.c + ' ' + r.ru + ' ' + r.en + ' ' + IcdInfo.name(r),
     fields: r => IcdInfo.fields(r.c),
-    row: (r, tt, open, sn) => `<details class="ref-item ref-icd"${open ? ' open' : ''}>
-      <summary class="ref-row"><b>${Ref.mark(r.c, tt)}</b><span>${Ref.mark(r.ru, tt)}</span><span class="en muted">${Ref.mark(r.en, tt)}</span>${sn || ''}</summary>
-      <div class="ref-body" data-c="${esc(r.c)}" data-n="${esc(r.ru)}"></div></details>`
+    row: (r, tt, open, sn) => { const nm = IcdInfo.name(r), sub = S.lang === 'uz' && nm !== r.ru ? r.ru : r.en;
+      return `<details class="ref-item ref-icd"${open ? ' open' : ''}>
+      <summary class="ref-row"><b>${Ref.mark(r.c, tt)}</b><span>${Ref.mark(nm, tt)}</span><span class="en muted">${Ref.mark(sub, tt)}</span>${sn || ''}</summary>
+      <div class="ref-body" data-c="${esc(r.c)}" data-n="${esc(r.ru)}"></div></details>`; }
   }); fill(); };
   /* справка грузится один раз при открытии раздела; когда пришла — поиск повторяется уже по содержимому */
   box.addEventListener('toggle', e => { if (e.target.matches && e.target.matches('details.ref-icd') && e.target.open) fill(); }, true);
   Ref.bind(input, draw);
-  if (!window.ICD_INFO) IcdInfo.load().then(draw);
+  if (!IcdInfo.ready()) IcdInfo.load().then(draw);
 };
 
 /* ---------- краткая справка по кодам МКБ (js/icd-info.js, грузится по требованию) ---------- */
 const IcdInfo = (function(){
-  let p = null;
+  let p = null, pu = null;
+  const uz = () => S.lang === 'uz';
+  const add = (f, v) => new Promise(res => { const s = document.createElement('script');
+    s.src = ASSET_BASE + f + '?v=' + v; s.onload = s.onerror = () => res(); document.head.appendChild(s); });
+  /* узбекский перевод (js/icd-uz.js) грузится только при языке uz */
+  function loadUz(){ if (uz() && !window.ICD_UZ && !pu) pu = add('js/icd-uz.js', ICD_UZ_V); return pu || Promise.resolve(); }
   function load(){
-    if (window.ICD_INFO) return Promise.resolve();
-    if (!p) p = new Promise(res => { const s = document.createElement('script');
-      s.src = ASSET_BASE + 'js/icd-info.js?v=' + ICD_INFO_V; s.onload = s.onerror = () => res(); document.head.appendChild(s); });
-    return p;
+    if (!window.ICD_INFO && !p) p = add('js/icd-info.js', ICD_INFO_V);
+    return Promise.all([p || Promise.resolve(), loadUz()]);
   }
+  const ready = () => !!window.ICD_INFO && (!uz() || !!window.ICD_UZ);
+  const uzRaw = code => uz() && window.ICD_UZ ? window.ICD_UZ[String(code || '')] : null;
+  /* название на текущем языке: узбекское, если есть перевод, иначе русское */
+  function name(r){ const u = uzRaw(r.c), n = u ? String(u).split('|')[0].trim() : ''; return n || r.ru; }
   const LBL = ['icd_i_what', 'icd_i_sym', 'icd_i_dx', 'icd_i_tx'];
-  /* [[подпись, текст]] — для поиска и карточки */
+  /* [[подпись, текст]] — для поиска и карточки; пустое поле перевода → русский текст */
   function fields(code){
-    const raw = window.ICD_INFO && window.ICD_INFO[String(code || '')];
-    return raw ? String(raw).split('|').map((x, i) => [t(LBL[i] || 'icd_i_tx'), x.trim()]).filter(f => f[1]) : [];
+    const raw = window.ICD_INFO && window.ICD_INFO[String(code || '')], u = uzRaw(code);
+    const ru = raw ? String(raw).split('|') : [], tr = u ? String(u).split('|').slice(1) : [];
+    return LBL.map((l, i) => [t(l), ((tr[i] || '').trim() || (ru[i] || '').trim())]).filter(f => f[1]);
   }
   function html(code, name, tt){
     const key = String(code || '');
     const first = key.split(/[-–]/)[0];                         // «Z86-Z87» → Z86
     const who = 'https://icd.who.int/browse10/2019/en#/' + encodeURIComponent(first);
     const wiki = 'https://ru.wikipedia.org/w/index.php?search=' + encodeURIComponent(String(name || '').replace(/\s*\(.*?\)\s*/g, ' ').trim());
-    const links = `<p class="icd-links">${ic('link')} ${t('icd_i_more')}: <a href="${wiki}" target="_blank" rel="noopener">Википедия ↗</a> · <a href="${who}" target="_blank" rel="noopener">ВОЗ МКБ-10 ↗</a></p>`;
+    const links = `<p class="icd-links">${ic('link')} ${t('icd_i_more')}: <a href="${wiki}" target="_blank" rel="noopener">${t('icd_wiki')} ↗</a> · <a href="${who}" target="_blank" rel="noopener">${t('icd_who')} ↗</a></p>`;
     if (!window.ICD_INFO) return `<p class="muted">${t('loading')}</p>`;
     const f = fields(key);
     if (!f.length) return `<p class="muted">${t('icd_i_none')}</p>` + links;
     return f.map(([l, x]) => `<p><b>${esc(l)}:</b> ${Ref.mark(x, tt)}</p>`).join('') + links;
   }
-  return {load, html, fields};
+  return {load, loadUz, ready, name, html, fields};
 })();
 const ICD_INFO_V = '20261111b';
+const ICD_UZ_V = '20261112b';
 
 /* ---------- DRUGS ---------- */
 /* классы в данных очень дробные (75 на 78 препаратов) — сводим в фармгруппы.
