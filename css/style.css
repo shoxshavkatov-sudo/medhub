@@ -432,10 +432,6 @@ html{scroll-behavior:smooth}
 @keyframes heartPop{0%{transform:scale(1)}45%{transform:scale(1.55)}100%{transform:scale(1)}}
 
 /* ---------- новости ---------- */
-.news-btn{position:relative;display:inline-flex;align-items:center;justify-content:center}
-.news-count{position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 5px;border-radius:99px;
-  background:var(--danger);color:#fff;font-size:.68rem;font-weight:800;line-height:18px;text-align:center;
-  box-shadow:0 0 0 2px var(--panel)}
 .badge .ic,.news-meta .ic{width:14px;height:14px;vertical-align:-2px}
 .badge.news-new{background:color-mix(in srgb,var(--danger) 15%,transparent);color:var(--danger)}
 .news-item{overflow:hidden}
@@ -448,16 +444,6 @@ html{scroll-behavior:smooth}
 .news-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55}
 .news-link{margin:12px 0 0}
 .news-warn{border-color:var(--danger);color:var(--danger)}
-.news-teaser .nt-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
-.news-teaser .nt-head h3{display:flex;align-items:center;gap:8px;margin:0}
-.news-teaser .nt-head h3 .ic{width:20px;height:20px;color:var(--accent)}
-.nt-all{font-size:.85rem;font-weight:600;text-decoration:none;white-space:nowrap}
-.nt-item{display:flex;flex-direction:column;gap:2px;margin-top:10px;padding:10px 12px;border-radius:10px;
-  background:var(--panel2);color:var(--text);text-decoration:none}
-.nt-item:hover{background:var(--line)}
-.nt-date{font-size:.75rem;color:var(--muted);display:flex;align-items:center;gap:6px}
-.nt-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--danger)}
-.nt-snip{font-size:.85rem;overflow-wrap:anywhere}
 .news-dlg{max-width:620px;max-height:90vh}
 .ne-hint{font-size:.85rem;margin:0 0 4px}
 .ne-lang{margin-top:12px;padding:4px 12px 12px;border:1px solid var(--line);border-radius:10px}

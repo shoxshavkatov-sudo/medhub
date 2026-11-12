@@ -248,8 +248,6 @@ function applyChrome(){
   $('#lang-select').value = S.lang;
   $('#global-search').placeholder = t('search_placeholder');
   const ab = $('#ai-btn'); if (ab) ab.onclick = ()=>AI.toggle();
-  const nb = $('#news-btn'); if (nb){ nb.onclick = ()=>go('news'); nb.title = t('nav_news'); nb.setAttribute('aria-label', t('nav_news')); }
-  News.badge();
   $('.small-print').textContent = t('disclaimer');
   $('#theme-btn').innerHTML = S.theme==='light'?ic('moon'):S.theme==='dark'?ic('sun'):ic('flame');
   buildDock();
@@ -258,6 +256,7 @@ let currentRoute = 'grades';
 
 /* --- hand-made SVG icons for the dock --- */
 const DOCK_ICONS = {
+ news:'<path d="M4 9.5h3l7-4.5v14l-7-4.5H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1Z"/><path d="M17.5 9.2a4 4 0 0 1 0 5.6"/><path d="m7.5 14.5 1.6 5h2.3l-1.3-4.3"/>',
  academy:'<path d="M12 4 21 8.5 12 13 3 8.5Z"/><path d="M6.5 10.8V15c0 1.5 2.5 2.8 5.5 2.8s5.5-1.3 5.5-2.8v-4.2"/><path d="M21 8.5v5.5"/>',
  search:'<circle cx="11" cy="11" r="6.2"/><path d="m15.8 15.8 5 5"/>',
  ref:'<path d="M5.5 5A2.5 2.5 0 0 1 8 2.5h10.5V19H8A2.5 2.5 0 0 0 5.5 21.5Z"/><path d="M5.5 19V5"/><path d="M12 6.5v6M9 9.5h6"/>',
@@ -269,7 +268,9 @@ const DOCK_ICONS = {
 };
 const DOCK = [
  {key:'academy', lbl:{ru:'Учёба', uz:'O‘quv', en:'Study'}, icon:'academy', first:'grades',
-  items:[['news','nav_news'],['grades','nav_grades'],['calendar','nav_calendar'],['materials','nav_materials'],['errors','nav_errors']]},
+  items:[['grades','nav_grades'],['calendar','nav_calendar'],['materials','nav_materials'],['errors','nav_errors']]},
+ {key:'news', lbl:{ru:'Новости', uz:'Yangilik', en:'News'}, icon:'news', first:'news',
+  items:[['news','nav_news']]},
  {key:'search', lbl:{ru:'Поиск', uz:'Qidiruv', en:'Search'}, icon:'search', first:'search',
   items:[['search','nav_search']]},
  {key:'ref', lbl:{ru:'Справка', uz:'Ma’lumot', en:'Ref'}, icon:'ref', first:'icd',
@@ -288,10 +289,11 @@ const DOCK = [
 function buildDock(){
   const dock = $('#dock'); if (!dock) return;
   const cur = DOCK.findIndex(d=>d.items.some(([r])=>r===currentRoute));
-  const items = DOCK.map(d=>({label: d.lbl[window.LANG]||d.lbl.ru, icon: DOCK_ICONS[d.icon]}));
+  const nn = News.unreadCount(), nb = nn>9 ? '9+' : nn ? String(nn) : '';
+  const items = DOCK.map(d=>({label: d.lbl[window.LANG]||d.lbl.ru, icon: DOCK_ICONS[d.icon], badge: d.key==='news' ? nb : ''}));
   if (window.LiquidDock) return LiquidDock.render(dock, items, cur, i=>dockTap(DOCK[i].key));
   /* запасной вариант, если js/liquid-dock.js не загрузился */
-  dock.innerHTML = DOCK.map((d,i)=>`<button class="dock-item ${i===cur?'on':''}" data-dept="${d.key}">${esc(items[i].label)}</button>`).join('');
+  dock.innerHTML = DOCK.map((d,i)=>`<button class="dock-item ${i===cur?'on':''}" data-dept="${d.key}">${esc(items[i].label)}${items[i].badge?` <b class="ld-badge">${items[i].badge}</b>`:''}</button>`).join('');
   dock.querySelectorAll('[data-dept]').forEach(b=>b.onclick=()=>dockTap(b.dataset.dept));
 }
 function dockTap(key){
@@ -301,6 +303,7 @@ function dockTap(key){
   /* повторный тап по открытому разделу закрывает меню подразделов */
   if (here && sheet && !sheet.classList.contains('hidden') && sheet.dataset.dept===key){ sheet.classList.add('hidden'); return; }
   if (!here) go(d.first);
+  if (d.items.length < 2){ if (sheet) sheet.classList.add('hidden'); return; }
   if (sheet){
     sheet.dataset.dept = key;
     sheet.innerHTML = `<div class="ds-head">${DOCK_ICONS[d.icon] ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${DOCK_ICONS[d.icon]}</svg>`:''}<b>${esc(d.lbl[window.LANG]||d.lbl.ru)}</b></div>` +
@@ -510,12 +513,9 @@ const News = (function(){
   const seenSet = () => new Set(Array.isArray(S.newsSeen) ? S.newsSeen : []);
   const unread = () => { const s = seenSet(); return list().filter(n=>!s.has(n._key)).length; };
   function markAll(){ S.newsSeen = list().map(n=>n._key); save(); badge(); }
-  function badge(){
-    const el = $('#news-count'); if (!el) return;
-    const n = state==='ok' ? unread() : 0;
-    el.textContent = n>9 ? '9+' : String(n);
-    el.classList.toggle('hidden', !n);
-  }
+  const unreadCount = () => state==='ok' ? unread() : 0;
+  /* счётчик на вкладке «Новости» в тулбаре */
+  function badge(){ if (typeof buildDock === 'function') buildDock(); }
 
   /* свои названия месяцев: в части браузеров нет узбекской локали (выходит «2026 M11 11») */
   const MONTHS = {
@@ -552,28 +552,9 @@ const News = (function(){
     </article>`;
   }
 
-  /* блок «последние новости» на стартовой странице */
-  function teaser(){
-    if (state !== 'ok') return '';
-    const items = list(); if (!items.length) return '';
-    const s = seenSet(), n = items.filter(x=>!s.has(x._key)).length;
-    return `<div class="card news-teaser">
-      <div class="nt-head"><h3>${ic('megaphone')} ${t('nav_news')}${n?` <span class="badge news-new">${n} · ${t('news_new')}</span>`:''}</h3>
-        <a href="#" class="nt-all" data-goto="news">${t('news_all')} →</a></div>
-      ${items.slice(0,2).map((x,i)=>{ const txt = pick(x.text).replace(/\s+/g,' ').trim();
-        return `<a href="#" class="nt-item" data-goto="news:${i}">
-          <span class="nt-date">${day(x.date)}${s.has(x._key)?'':' <i class="nt-dot"></i>'}</span>
-          <b>${esc(pick(x.title))}</b>
-          ${txt?`<span class="muted nt-snip">${esc(txt.length>150 ? txt.slice(0,150).trim()+'…' : txt)}</span>`:''}</a>`; }).join('')}
-    </div>`;
-  }
-
   function refresh(){
     badge();
     if (currentRoute === 'news') go('news');
-    else if (currentRoute === 'grades' && !$('#view .news-teaser')){
-      const h = $('#view .page-head'); if (h) h.insertAdjacentHTML('afterend', teaser());
-    }
   }
   function load(){
     window.addEventListener('error', e => {
@@ -646,7 +627,7 @@ const News = (function(){
     update();
   }
 
-  return {list, seenSet, markAll, badge, card, teaser, load, editorDlg,
+  return {list, seenSet, markAll, badge, unreadCount, card, load, editorDlg,
     isEditor: () => editor, status: () => ({state, err})};
 })();
 
@@ -678,7 +659,7 @@ ROUTES.grades = function(){
   const byCourse = {};
   for (let c=1;c<=6;c++){ const arr = S.grades.filter(g=>g.course===c);
     byCourse[c] = arr.length ? arr.reduce((a,g)=>a+g.grade,0)/arr.length : null; }
-  return head(t('nav_grades'), t('grades_hint')) + News.teaser() + `
+  return head(t('nav_grades'), t('grades_hint')) + `
   <div class="grid g4">
     <div class="stat"><div class="num">${gpa?gpa.toFixed(2):'—'}</div><div class="lbl">${t('gpa')}</div></div>
     <div class="stat"><div class="num">${S.grades.length}</div><div class="lbl">${t('total')} ${t('grade').toLowerCase()}</div></div>
