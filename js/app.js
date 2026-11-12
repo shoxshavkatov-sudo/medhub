@@ -838,7 +838,7 @@ ROUTES.calendar = function(){
   const dim = new Date(y,m+1,0).getDate();
   const evByDate = {};
   S.events.forEach(e=>{ (evByDate[e.date]=evByDate[e.date]||[]).push(e); });
-  let cells = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map(d=>`<div class="dow">${d}</div>`).join('');
+  let cells = t('cal_dows').split(',').map(d=>`<div class="dow">${esc(d)}</div>`).join('');
   for (let i=0;i<startDow;i++) cells += `<div class="day other"></div>`;
   for (let d=1;d<=dim;d++){
     const iso = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
@@ -854,12 +854,12 @@ ROUTES.calendar = function(){
     `<div class="empty">${t('ev_none')}</div>`;
   return head(t('nav_calendar'), t('cal_hint')) + `
   <div class="card">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-      <button class="btn secondary small" id="cal-prev">←</button>
-      <b style="flex:1;text-align:center;font-size:1.05rem">${calMonth.toLocaleDateString(undefined,{month:'long',year:'numeric'})}</b>
-      <button class="btn secondary small" id="cal-next">→</button>
-      <button class="btn small" id="cal-add">＋ ${t('add_event')}</button>
-      <button class="btn small secondary" id="cal-pdf">${ic('download')} PDF</button>
+    <div class="cal-bar">
+      <button class="btn secondary small" id="cal-prev" aria-label="←">←</button>
+      <b class="cal-title">${esc(t('cal_months').split(',')[m])} ${y}</b>
+      <button class="btn secondary small" id="cal-next" aria-label="→">→</button>
+      <button class="btn small cal-act" id="cal-add">＋ ${t('add_event')}</button>
+      <button class="btn small secondary cal-act" id="cal-pdf">${ic('download')} PDF</button>
     </div>
     <div class="cal">${cells}</div>
   </div>
