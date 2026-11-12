@@ -1965,7 +1965,7 @@ ROUTES.patient.after = function(){
     $('#pt-sound').onclick = ()=>Ausc.play(window.SOUNDS.find(s=>s.id===c.sound).synth);
     $('#pt-map').innerHTML = BodyMap.html('male', c.pain);
     BodyMap.bind($('#pt-map'), ()=>{});
-    pmap.classList.add('mini');
+    const pmini = $('#pt-map .body-photo'); if (pmini) pmini.classList.add('mini');   /* 2D-фолбэк карты — компактный */
     ECGRen.start($('#pt-ecg'), window.ECGS.find(e=>e.id===c.ecg), S.theme, 0.8);
     $('#pt-check').onclick = ()=>{
       S.patient.attempted++;
