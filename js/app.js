@@ -26,6 +26,29 @@ catch { S = Object.assign({}, DEFAULTS); }
 const save = () => localStorage.setItem('medhub', JSON.stringify(S));
 window.LANG = S.lang;
 
+/* ---------------- узбекский перевод содержимого разделов (js/uz-data.js) ----------------
+   Данные (предметы, анализы, калькуляторы, симуляторы, тесты, пациенты) хранятся по-русски.
+   При языке uz словарь UZT подгружается до отрисовки раздела (go ждёт его), tz(строка) отдаёт перевод
+   или ту же строку — значения в селектах и сохранённых записях остаются русскими. */
+const UZ_DATA_V = '20261112a';
+const UzData = (function(){
+  let p = null;
+  const need = () => S.lang === 'uz' && !window.UZT;
+  function load(){
+    if (need() && !p) p = new Promise(res => { const sc = document.createElement('script');
+      sc.src = ASSET_BASE + 'js/uz-data.js?v=' + UZ_DATA_V;
+      sc.onload = () => res();
+      sc.onerror = () => { window.UZT = window.UZT || {}; res(); };   // не загрузился — остаётся русский текст
+      document.head.appendChild(sc); });
+    return p || Promise.resolve();
+  }
+  return {need, load};
+})();
+const tz = s => (S.lang === 'uz' && window.UZT && s && window.UZT[s]) || s;
+/* значение с единицами («12.5 ммоль/л», «7 баллов (1 и 5 мин)») — переводим русские куски */
+const tzu = v => S.lang !== 'uz' ? v : String(v).replace(/[А-Яа-яЁё][А-Яа-яЁё\/.\d²() ]*/g, m => { const k = m.trimEnd(); return tz(k) + m.slice(k.length); });
+window.tz = tz;
+
 /* ---------------- оценки: 100-балльная шкала (как в вузах Узбекистана) ----------------
    86–100 → «5» отлично, 71–85 → «4» хорошо, 55–70 → «3» удовлетворительно, 0–54 → «2».
    Старые оценки 2–5 (записи без scale:100) переводятся в середину своего диапазона. */
@@ -237,13 +260,13 @@ const Store = (function(){
         // сервер перезапущен с чистыми данными / группу удалили — само-лечимся
         if (j.error === 'group not found' && typeof S !== 'undefined' && S.group){
           S.group = null; save(); applyChrome();
-          throw new Error('Группа больше не существует на сервере — создайте новую или войдите по коду');
+          throw new Error(t('err_group_gone'));
         }
         if (j.error === 'group not found'){
-          throw new Error('Группа с таким кодом не найдена — проверьте код');
+          throw new Error(t('err_group_404'));
         }
         if (typeof j.error === 'string' && j.error.includes('not found'))
-          throw new Error('Запись не найдена — возможно, её уже удалили. Обновите страницу');
+          throw new Error(t('err_entry_404'));
         throw new Error(j.error || r.status);
       }
       return j;
@@ -335,6 +358,8 @@ document.addEventListener('click', e=>{
 });
 
 function go(route, arg){
+  /* язык uz, а словарь содержимого ещё не загружен — сначала он (один раз, ~30–150 КБ) */
+  if (UzData.need()){ currentRoute = route; UzData.load().then(() => { if (currentRoute === route) go(route, arg); }); return; }
   stopSims();
   try{ Board.unmount(); }catch(_e){}
   try{ Gloss.hide(); }catch(_e){}
@@ -443,7 +468,7 @@ const visSelect = (cur='group') => `<label class="f">${t('visibility')}</label>
   <option value="group" ${cur==='group'?'selected':''}>${t('vis_group')}</option>
   <option value="public" ${cur==='public'?'selected':''}>${t('vis_public')}</option></select>`;
 function organDlg(oid){
-  const names = {brain:'Мозг', heart:'Сердце', lungs:'Лёгкое', lungs2:'Лёгкое', liver:'Печень', stomach:'Желудок', gut:'Кишечник', kidney:'Почка', bladder:'Мочевой пузырь'};
+  const names = {brain:t('org_brain'), heart:t('org_heart'), lungs:t('org_lung'), lungs2:t('org_lung'), liver:t('org_liver'), stomach:t('org_stomach'), gut:t('org_gut'), kidney:t('org_kidney'), bladder:t('org_bladder')};
   const key = String(oid||'').toLowerCase();
   const map = [['heart','heart'],['lung','lungs'],['liver','liver'],['stomach','stomach'],['intestin','gut'],['gut','gut'],['kidney','kidney'],['bladder','bladder'],['brain','brain'],['cerebr','brain']];
   let info = (window.ORGAN_INFO||{})[oid];
@@ -452,7 +477,7 @@ function organDlg(oid){
     for (const [kw, kk] of map){ if (key.includes(kw)){ info = (window.ORGAN_INFO||{})[kk]; name = names[kk]; break; } }
   }
   if (!name) name = String(oid).replace(/[_.]/g,' ').slice(0,40);
-  if (!info) info = 'Фрагмент анатомической модели туловища. Наведённый в 3D орган — часть системы организма; подробнее в разделах «Справка» и «Атлас».';
+  info = info ? tz(info) : t('organ_generic');
   dlg(`<h3>${ic('info')} ${esc(name)}</h3><p style="line-height:1.55">${esc(info)}</p><p><button class="btn" data-close>${t('close')}</button></p>`);
 }
 window.organDlg = organDlg;
@@ -696,7 +721,7 @@ ROUTES.grades = function(){
     <h3>${t('add_grade')}</h3>
     <div class="formrow g2">
       <div><label class="f">${t('subject')}</label><select id="g-sub">${window.SUBJECTS.map(s=>
-        `<option value="${esc(s.n)}" data-c="${s.c}">${t('course'+s.c)} — ${esc(s.n)}</option>`).join('')}</select></div>
+        `<option value="${esc(s.n)}" data-c="${s.c}">${t('course'+s.c)} — ${esc(tz(s.n))}</option>`).join('')}</select></div>
       <div><label class="f">${t('grade')} (0–100)</label><input type="number" id="g-grade" min="0" max="100" step="1" placeholder="0–100" inputmode="decimal">
         <div class="g-band muted" id="g-band"></div></div>
     </div>
@@ -735,7 +760,7 @@ ROUTES.grades.after = function(){
   function gradeTable(rows){
     return `<div class="table-wrap"><table class="gtable"><thead><tr><th>${t('subject')}</th><th class="g-c">${t('course')}</th><th>${t('grade')}</th><th class="g-cr">${t('credits')}</th><th class="g-d">${t('date')}</th><th class="g-act"><span class="sr-only">${t('edit')}</span></th></tr></thead>
     <tbody>${rows.slice().sort((a,b)=>(b.ts||0)-(a.ts||0)).map(g=>`
-      <tr><td>${esc(g.subject)}<div class="g-meta muted">${t('course'+(g.course||1))}${g.cred?` · ${g.cred} ECTS`:''}${g.date?` · <span class="nw">${esc(g.date)}</span>`:''}</div></td>
+      <tr><td>${esc(tz(g.subject))}<div class="g-meta muted">${t('course'+(g.course||1))}${g.cred?` · ${g.cred} ECTS`:''}${g.date?` · <span class="nw">${esc(g.date)}</span>`:''}</div></td>
         <td class="g-c">${t('course'+(g.course||1))}</td><td>${gChip(gv(g))}</td><td class="g-cr">${g.cred||'—'}</td><td class="g-d">${esc(g.date||'')}</td>
         <td class="g-act">${mine(g.id) ? `<button class="icon-btn" data-gedit="${esc(g.id)}" title="${esc(t('edit'))}" aria-label="${esc(t('edit'))}">${ic('pen')}</button>
           <button class="icon-btn g-del" data-gdel="${esc(g.id)}" title="${esc(t('delete'))}" aria-label="${esc(t('delete'))}">${ic('trash')}</button>` : ''}</td></tr>`).join('') ||
@@ -774,7 +799,7 @@ ROUTES.grades.after = function(){
   $('#g-pdf').onclick = ()=>PDFX.download('medhub-ocenki.pdf', t('nav_grades'), [
     {kv:[t('gpa'), S.grades.length ? `${gFmt(gAvg(S.grades))}/100 («${gBand(gAvg(S.grades))[1]}»)` : '—']},
     {table:{head:[t('subject'),t('course'),t('grade')+' (0–100)',t('credits'),t('date')],
-      rows:S.grades.map(g=>[g.subject,t('course'+g.course),`${gFmt(gv(g))} («${gBand(gv(g))[1]}»)`,g.cred||'—',g.date])}}]);
+      rows:S.grades.map(g=>[tz(g.subject),t('course'+g.course),`${gFmt(gv(g))} («${gBand(gv(g))[1]}»)`,g.cred||'—',g.date])}}]);
   // trend chart: running average of grades sorted by date
   const cv = $('#gpa-chart'); if (cv){ const ctx = cv.getContext('2d'); cv.width = cv.offsetWidth;
     const pts = S.grades.slice().sort((a,b)=>a.date<b.date?-1:1);
@@ -804,7 +829,7 @@ function editGradeDialog(id){
   const g = S.grades.find(x => x.id === id); if (!g) return;
   const d = dlg(`<h3>${ic('pen')} ${t('edit_grade')}</h3>
     <label class="f">${t('subject')}</label><select id="ge-sub">${window.SUBJECTS.map(s=>
-      `<option value="${esc(s.n)}" data-c="${s.c}"${s.n===g.subject?' selected':''}>${t('course'+s.c)} — ${esc(s.n)}</option>`).join('')}</select>
+      `<option value="${esc(s.n)}" data-c="${s.c}"${s.n===g.subject?' selected':''}>${t('course'+s.c)} — ${esc(tz(s.n))}</option>`).join('')}</select>
     <label class="f">${t('grade')} (0–100)</label><input type="number" id="ge-grade" min="0" max="100" step="1" inputmode="decimal" value="${gFmt(gv(g))}">
     <div class="g-band muted" id="ge-band"></div>
     <div class="formrow g2">
@@ -816,7 +841,7 @@ function editGradeDialog(id){
   const sub = d.querySelector('#ge-sub'), gi = d.querySelector('#ge-grade'), gb = d.querySelector('#ge-band');
   /* предмета нет в списке (старое название) — оставляем его первым вариантом */
   if (!sub.value || sub.value !== g.subject){
-    const o = document.createElement('option'); o.value = g.subject; o.textContent = g.subject; o.dataset.c = g.course || 1; o.selected = true; sub.prepend(o);
+    const o = document.createElement('option'); o.value = g.subject; o.textContent = tz(g.subject); o.dataset.c = g.course || 1; o.selected = true; sub.prepend(o);
   }
   const hint = () => { const v = +gi.value, ok = gi.value.trim() !== '' && v >= 0 && v <= 100;
     gb.innerHTML = ok ? `= <b>«${gBand(v)[1]}»</b> ${t('band_'+gBand(v)[1])}` : (gi.value.trim() ? t('grade_invalid') : ''); };
@@ -849,7 +874,7 @@ ROUTES.calendar = function(){
   const upcoming = S.events.filter(e=>e.date>=todayISO()).sort((a,b)=>a.date<b.date?-1:1).slice(0,8)
     .map(e=>`<div class="entry tight"><div class="meta"><span class="badge ${e.type==='exam'?'bad':e.type==='colloq'||e.type==='test'?'warn':'ok'}">${t('ev_'+e.type)}</span>
       <b>${e.date}</b> ${e.time?esc(e.time):''} · ${daysBetween(todayISO(),e.date)} ${t('days_left')}</div>
-      <div><b>${esc(e.title||t('ev_'+e.type))}</b>${e.subject?` · ${esc(e.subject)}`:''}
+      <div><b>${esc(e.title||t('ev_'+e.type))}</b>${e.subject?` · ${esc(tz(e.subject))}`:''}
       <button class="btn small danger" style="float:right" data-evdel="${e.id}">${ic('trash')}</button></div></div>`).join('') ||
     `<div class="empty">${t('ev_none')}</div>`;
   return head(t('nav_calendar'), t('cal_hint')) + `
@@ -871,7 +896,7 @@ ROUTES.calendar.after = function(){
   $('#cal-pdf').onclick = ()=>PDFX.download('medhub-calendar.pdf', t('nav_calendar'), [
     {table:{head:[t('date'),t('type'),t('title'),t('subject')],
       rows:S.events.filter(e=>e.date>=todayISO()).sort((a,b)=>a.date<b.date?-1:1)
-        .map(e=>[e.date, t('ev_'+e.type), e.title||t('ev_'+e.type), e.subject||'—'])}}]);
+        .map(e=>[e.date, t('ev_'+e.type), e.title||t('ev_'+e.type), tz(e.subject)||'—'])}}]);
   $$('.cal .day[data-date]').forEach(d=>d.onclick=()=>addEventDialog(d.dataset.date));
   $('#cal-add').onclick = ()=>addEventDialog(todayISO());
   $$('[data-evdel]').forEach(b=>b.onclick=()=>{ S.events = S.events.filter(e=>e.id!==b.dataset.evdel); save(); go('calendar'); });
@@ -882,7 +907,7 @@ function addEventDialog(date){
     <label class="f">${t('type')}</label><select id="ev-type">
       ${['lecture','practice','colloq','test','exam','duty'].map(x=>`<option value="${x}">${t('ev_'+x)}</option>`).join('')}</select>
     <label class="f">${t('title')}</label><input type="text" id="ev-title" placeholder="">
-    <label class="f">${t('subject')}</label><select id="ev-sub"><option value="">—</option>${window.SUBJECTS.map(s=>`<option>${esc(s.n)}</option>`).join('')}</select>
+    <label class="f">${t('subject')}</label><select id="ev-sub"><option value="">—</option>${window.SUBJECTS.map(s=>`<option value="${esc(s.n)}">${esc(tz(s.n))}</option>`).join('')}</select>
     <label class="f">⏰</label><input type="time" id="ev-time">
     <p style="display:flex;gap:10px;margin-top:14px"><button class="btn" id="ev-ok">${t('save')}</button>
     <button class="btn secondary" data-close>${t('cancel')}</button></p>`);
@@ -925,8 +950,8 @@ async function fetchFeed(type){
 function entryHtml(e, extra=''){
   const mine = S.group && e.authorId === S.group.me.id;
   return `<div class="entry" data-eid="${e.id}">
-    <div class="meta">${visIcon(e.visibility)} <b>${esc(e.authorName)}</b>${e.groupName?` <span class="badge">${ic('users')} ${esc(e.groupName)}</span>`:''} · ${fmtD(e.ts)}</div>
-    ${e.title?`<div><b>${esc(e.title)}</b></div>`:''}
+    <div class="meta">${visIcon(e.visibility)} <b>${esc(e.authorName==='Я' ? t('me') : e.authorName)}</b>${e.groupName?` <span class="badge">${ic('users')} ${esc(e.groupName)}</span>`:''} · ${fmtD(e.ts)}</div>
+    ${e.title?`<div><b>${esc(tz(e.title))}</b></div>`:''}
     ${e.meta&&e.meta.link?`<div>${ic('link')} <a href="${esc(e.meta.link)}" target="_blank" rel="noopener">${esc(e.meta.link)}</a></div>`:''}
     ${e.body?`<div class="body">${esc(e.body)}</div>`:''}
     ${extra}
@@ -1016,7 +1041,7 @@ ROUTES.errors = function(){
       <div><label class="f">${t('right_ans')}</label><textarea id="e-right"></textarea></div>
     </div>
     <label class="f">${t('lesson')}</label><textarea id="e-lesson"></textarea>
-    <label class="f">${t('subject')}</label><select id="e-sub"><option value="">—</option>${window.SUBJECTS.map(s=>`<option>${esc(s.n)}</option>`).join('')}</select>
+    <label class="f">${t('subject')}</label><select id="e-sub"><option value="">—</option>${window.SUBJECTS.map(s=>`<option value="${esc(s.n)}">${esc(tz(s.n))}</option>`).join('')}</select>
     <p><button class="btn" id="e-post">${ic('send')} ${t('feed_post')}</button></p>
   </div>
   <div id="err-feed"><div class="empty">${t('loading')}</div></div>`;
@@ -1091,12 +1116,12 @@ ROUTES.search.after = function(q){
     if (scope === 'web'){
       const enc = encodeURIComponent(q);
       const srcs = {
-        books:[[`https://www.google.com/search?q=${enc}+site:drive.google.com+OR+filetype:pdf+медицина+учебник`,'Google: учебники PDF'],
+        books:[[`https://www.google.com/search?q=${enc}+site:drive.google.com+OR+filetype:pdf+медицина+учебник`,t('web_books')],
                [`https://openlibrary.org/search?q=${enc}`,'Open Library']],
         articles:[[`https://pubmed.ncbi.nlm.nih.gov/?term=${enc}`,'PubMed'],
                [`https://scholar.google.com/scholar?q=${enc}`,'Google Scholar'],
                [`https://www.cochranelibrary.com/search?q=${enc}`,'Cochrane Library']],
-        cheats:[[`https://www.google.com/search?q=${enc}+конспект+шпаргалка+медицина`,'Google: конспекты'],
+        cheats:[[`https://www.google.com/search?q=${enc}+конспект+шпаргалка+медицина`,t('web_notes')],
                [`https://ru.wikibooks.org/w/index.php?search=${enc}`,'Wikibooks']],
         video:[[`https://www.youtube.com/results?search_query=${enc}+медицина+лекция`,'YouTube'],
                [`https://www.youtube.com/results?search_query=${enc}+osmosis`,'YouTube (Osmosis)']]
@@ -1139,8 +1164,8 @@ ROUTES.search.after = function(q){
         res.push({where:t('nav_reflect'), title:r.sit.slice(0,60), sub:r.err.slice(0,90), route:'reflect'});
       for (const e of S.events) if ((e.title+' '+(e.subject||'')).toLowerCase().includes(ql))
         res.push({where:t('nav_calendar'), title:e.title||t('ev_'+e.type), sub:e.date, route:'calendar'});
-      for (const g of S.grades) if (g.subject.toLowerCase().includes(ql))
-        res.push({where:t('nav_grades'), title:g.subject, sub:`${t('grade')}: ${gFmt(gv(g))}/100`, route:'grades'});
+      for (const g of S.grades) if ((g.subject+' '+tz(g.subject)).toLowerCase().includes(ql))
+        res.push({where:t('nav_grades'), title:tz(g.subject), sub:`${t('grade')}: ${gFmt(gv(g))}/100`, route:'grades'});
     }
     box.innerHTML = res.length ? `<div class="muted" style="margin:8px 0">${t('results_in')}: ${res.length}</div>` +
       res.slice(0,40).map(r=>`<div class="sr"><div class="where">${esc(r.where)}</div>
@@ -1429,16 +1454,16 @@ ROUTES.labs.after = function(){
   let panel = 'hem';
   const draw = ()=>{
     const q = ($('#lab-q').value||'').toLowerCase().trim();
-    const rows = window.LABS.filter(l=>(panel==='all'||l.p===panel) && (!q || l.a.toLowerCase().includes(q)));
+    const rows = window.LABS.filter(l=>(panel==='all'||l.p===panel) && (!q || (l.a+' '+tz(l.a)).toLowerCase().includes(q)));
     $('#lab-list').innerHTML = `<table><thead><tr><th>${t('lab_analyte')}</th><th>${t('lab_unit')}</th><th>${t('lab_m')}</th><th>${t('lab_f')}</th><th>${t('lab_child')}</th><th>${t('lab_note')}</th></tr></thead>
-      <tbody>${rows.map(l=>`<tr><td><b>${esc(l.a)}</b></td><td>${esc(l.u)}</td><td>${esc(l.m||'—')}</td><td>${esc(l.f||'—')}</td><td>${esc(l.ch||'—')}</td><td class="muted">${esc(l.n||'')}</td></tr>`).join('')}</tbody></table>`;
+      <tbody>${rows.map(l=>`<tr><td><b>${esc(tz(l.a))}</b></td><td>${esc(tz(l.u))}</td><td>${esc(tz(l.m)||'—')}</td><td>${esc(tz(l.f)||'—')}</td><td>${esc(tz(l.ch)||'—')}</td><td class="muted">${esc(tz(l.n)||'')}</td></tr>`).join('')}</tbody></table>`;
   };
   $$('#lab-tabs .chip').forEach(b=>b.onclick=()=>{ panel=b.dataset.p;
     $$('#lab-tabs .chip').forEach(x=>x.classList.toggle('on',x===b)); draw(); });
   $('#lab-q').addEventListener('input', draw);
   $('#lab-pdf').onclick = ()=>PDFX.download('medhub-normy.pdf', t('nav_labs'), [
     {table:{head:[t('lab_analyte'),t('lab_unit'),t('lab_m'),t('lab_f'),t('lab_child')],
-      rows:window.LABS.filter(l=>panel==='all'||l.p===panel).map(l=>[l.a,l.u,l.m||'—',l.f||'—',l.ch||'—'])}}]);
+      rows:window.LABS.filter(l=>panel==='all'||l.p===panel).map(l=>[tz(l.a),tz(l.u),tz(l.m)||'—',tz(l.f)||'—',tz(l.ch)||'—'])}}]);
   draw();
 };
 
@@ -1666,9 +1691,9 @@ ROUTES.protocols.after = function(){
 /* ---------- CALCULATORS ---------- */
 ROUTES.calcs = function(){
   return head(t('nav_calc'), t('calc_hint')) + `<div class="grid g2">` + window.CALCS.map(c=>`
-  <div class="card calc-card"><h3>${esc(c.n)}</h3>
-    ${c.f.map(f=>`<label class="f">${esc(f.l)}</label>${
-      f.t==='s' ? `<select data-calc="${c.id}" data-k="${f.k}">${f.o.map(o=>`<option>${o}</option>`).join('')}</select>`
+  <div class="card calc-card"><h3>${esc(tz(c.n))}</h3>
+    ${c.f.map(f=>`<label class="f">${esc(tz(f.l))}</label>${
+      f.t==='s' ? `<select data-calc="${c.id}" data-k="${f.k}">${f.o.map(o=>`<option value="${esc(o)}">${esc(tz(o))}</option>`).join('')}</select>`
       : `<input type="number" step="any" data-calc="${c.id}" data-k="${f.k}">`}`).join('')}
     <div class="result hidden" data-res="${c.id}"><div class="rv"></div><div class="interp muted"></div></div>
   </div>`).join('') + `</div>`;
@@ -1683,8 +1708,8 @@ ROUTES.calcs.after = function(){
     if (!complete){ res.classList.add('hidden'); return; }
     try { const out = c.c(vals);
       res.classList.remove('hidden');
-      res.querySelector('.rv').textContent = out.v;
-      res.querySelector('.interp').textContent = out.i||''; }
+      res.querySelector('.rv').textContent = tzu(out.v);
+      res.querySelector('.interp').textContent = tz(out.i||''); }
     catch(e){ res.classList.add('hidden'); }
   };
   $$('[data-calc]').forEach(el=>el.addEventListener('input', ()=>recompute(el.dataset.calc)));
@@ -1703,10 +1728,10 @@ ROUTES.pain = function(){
     <div class="bodymap-wrap" id="pain-svg"></div>
     <div id="pain-info"><div class="empty">${t('pain_hint')}</div></div>
   </div>
-  <div class="card"><h3>${ic('heart')} 3D-анатомия</h3>
-    <p class="muted" style="font-size:.84rem;margin-top:0">Реальные 3D-модели человека и внутренностей — нажмите, чтобы увеличить.</p>
+  <div class="card"><h3>${ic('heart')} ${t('anat3d_card')}</h3>
+    <p class="muted" style="font-size:.84rem;margin-top:0">${t('anat3d_card_hint')}</p>
     <div class="anat-grid">${window.ANAT_LIB.map(a=>`
-      <figure class="anat-fig" data-anat="${a.k}"><img src="${a.f}" alt="${esc(a.l)}" loading="lazy"><figcaption>${esc(a.l)}</figcaption></figure>`).join('')}
+      <figure class="anat-fig" data-anat="${a.k}"><img src="${a.f}" alt="${esc(tz(a.l))}" loading="lazy"><figcaption>${esc(tz(a.l))}</figcaption></figure>`).join('')}
     </div>
   </div>`;
 };
@@ -1715,20 +1740,20 @@ ROUTES.pain.after = function(){
   $('#pain-svg').innerHTML = BodyMap.html(painMode);
   $$('#view [data-anat]').forEach(f=>f.onclick=()=>{
     const a = anatBy(f.dataset.anat);
-    dlg(`<h3>${esc(a.l)}</h3><img src="${a.f}" style="width:100%;border-radius:12px" alt="">
+    dlg(`<h3>${esc(tz(a.l))}</h3><img src="${a.f}" style="width:100%;border-radius:12px" alt="">
       <p><button class="btn" data-close>${t('close')}</button></p>`);
   });
   BodyMap.bind($('#pain-svg'), zid=>{
     const z = window.PAIN_ZONES.find(x=>x.id===zid); if (!z) return;
     const anat = anatBy(ZONE_ANAT[z.id]);
     $('#pain-info').innerHTML = `<div class="card">
-      <h3>${esc(z.n)}</h3>
-      ${anat?`<figure class="anat-fig"><img src="${anat.f}" alt="${esc(anat.l)}" loading="lazy"><figcaption>${esc(anat.l)}</figcaption></figure>`:''}
-      <p><b>${t('pain_organs')}:</b> ${esc(z.organs)}</p>
-      <p><b>${t('pain_causes')}:</b> ${esc(z.causes)}</p>
-      <p><b>${t('pain_irr')}:</b> ${esc(z.irr)}</p>
-      <p style="color:var(--danger)"><b>${t('pain_red')}:</b> ${esc(z.red)}</p>
-      ${painMode==='child'&&z.peds?`<p class="muted">${ic('child')} <b>${t('mode_child')}:</b> ${esc(z.peds)}</p>`:''}
+      <h3>${esc(tz(z.n))}</h3>
+      ${anat?`<figure class="anat-fig"><img src="${anat.f}" alt="${esc(tz(anat.l))}" loading="lazy"><figcaption>${esc(tz(anat.l))}</figcaption></figure>`:''}
+      <p><b>${t('pain_organs')}:</b> ${esc(tz(z.organs))}</p>
+      <p><b>${t('pain_causes')}:</b> ${esc(tz(z.causes))}</p>
+      <p><b>${t('pain_irr')}:</b> ${esc(tz(z.irr))}</p>
+      <p style="color:var(--danger)"><b>${t('pain_red')}:</b> ${esc(tz(z.red))}</p>
+      ${painMode==='child'&&z.peds?`<p class="muted">${ic('child')} <b>${t('mode_child')}:</b> ${esc(tz(z.peds))}</p>`:''}
     </div>`;
   });
 };
@@ -1752,20 +1777,20 @@ ROUTES.auscult.after = function(){
   const pickSound = (snd, pointLabel)=>{
       Ausc.play(snd.synth);
       $('#ausc-info').innerHTML = `<div class="card">
-        <h3>${ic('headphones')} ${esc(snd.n)}</h3>
-        <p class="muted" style="font-size:.82rem">${ic('pin')} ${esc(pointLabel)}</p>
-        <p><b>${t('ausc_findings')}:</b> ${esc(snd.desc)}</p>
-        <p><b>${t('ausc_meaning')}:</b> ${esc(snd.meaning)}</p>
+        <h3>${ic('headphones')} ${esc(tz(snd.n))}</h3>
+        <p class="muted" style="font-size:.82rem">${ic('pin')} ${esc(tz(pointLabel))}</p>
+        <p><b>${t('ausc_findings')}:</b> ${esc(tz(snd.desc))}</p>
+        <p><b>${t('ausc_meaning')}:</b> ${esc(tz(snd.meaning))}</p>
         <p><button class="btn danger small" id="ausc-stop">■ ${t('stop_sound')}</button></p></div>`;
       $('#ausc-stop').onclick = ()=>{ Ausc.stop(); };
     };
     if (window.Body3D){
       const pts = [];
       for (const snd of window.SOUNDS){ if (snd.cat!==auscCat) continue;
-        for (const p of snd.points) pts.push({id:snd.id, label:p.l, u:p.x, v:p.y}); }
+        for (const p of snd.points) pts.push({id:snd.id, label:tz(p.l), u:p.x, v:p.y}); }
       $('#ausc-svg').innerHTML = `<div class="body3d-box"><div class="body3d" id="ausc3d"></div>
-        <div class="body3d-bar"><span class="body3d-hint">Вращайте мышью · колесо — зум · тыкайте в точки</span>
-        <label class="xray-lbl"><input type="range" min="15" max="100" value="100" class="xray-range"> Рентген</label></div></div>`;
+        <div class="body3d-bar"><span class="body3d-hint">${t('body3d_hint')}</span>
+        <label class="xray-lbl"><input type="range" min="15" max="100" value="100" class="xray-range"> ${t('cat_xray')}</label></div></div>`;
       const inst = window.Body3D.create($('#ausc3d'), {mode:'male', points:pts, color:0x2f6fed,
         onPick:(id,label)=>{ const snd = window.SOUNDS.find(s=>s.id===id); if (snd) pickSound(snd, label); },
         onOrgan:(oid)=>{ organDlg(oid); }});
@@ -1775,7 +1800,7 @@ ROUTES.auscult.after = function(){
       let markers = '';
       for (const snd of window.SOUNDS){ if (snd.cat!==auscCat) continue;
         for (const p of snd.points){
-          markers += `<button class="ausc-pt" data-sound="${snd.id}" data-p="${esc(p.l)}" style="left:${p.x}%;top:${p.y}%" title="${esc(p.l)}" aria-label="${esc(p.l)}"></button>`; } }
+          markers += `<button class="ausc-pt" data-sound="${snd.id}" data-p="${esc(p.l)}" style="left:${p.x}%;top:${p.y}%" title="${esc(tz(p.l))}" aria-label="${esc(tz(p.l))}"></button>`; } }
       $('#ausc-svg').innerHTML = `<div class="body-photo ausc-photo"><img src="img/body_blue.jpg" alt="" draggable="false">${markers}</div>`;
       $('#ausc-svg').querySelectorAll('.ausc-pt').forEach(el=>{
         el.onclick = ()=>{ const snd = window.SOUNDS.find(s=>s.id===el.dataset.sound); if (snd) pickSound(snd, el.dataset.p); };
@@ -1789,9 +1814,9 @@ ROUTES.ecg = function(){
   ecgQuiz = null;
   return head(t('nav_ecg'), t('ecg_hint')) + `
   <div class="chiprow" id="ecg-list">
-    ${window.ECGS.map(e=>`<button class="chip" data-e="${e.id}">${esc(e.n)}</button>`).join('')}
+    ${window.ECGS.map(e=>`<button class="chip" data-e="${e.id}">${esc(tz(e.n))}</button>`).join('')}
     <button class="chip" id="ecg-quiz-start">${ic('dice')} ${t('ecg_quiz')}</button>
-    <button class="chip" id="ecg-snd">${ic('headphones')} Звук: выкл</button>
+    <button class="chip" id="ecg-snd">${ic('headphones')} ${t('snd_off')}</button>
   </div>
   <div class="canvas-wrap"><canvas id="ecg-cv"></canvas>
     <div class="ecg-hud" id="ecg-hud"><span class="ecg-heart">${ic('heart')}</span><b>—</b><small>${t('ecg_rate')}</small></div>
@@ -1814,29 +1839,29 @@ ROUTES.ecg.after = function(){
     const hud = $('#ecg-hud');
     hud.querySelector('b').textContent = r.rate || '--';
     $('#ecg-info').innerHTML = `<div class="card">
-      <div class="meta"><span class="badge">${esc(r.cat)}</span> <span class="badge">${t('ecg_rate')}: ${r.rate||'—'}</span></div>
-      <h3>${esc(r.n)}</h3>
-      <p>${esc(r.findings)}</p>
+      <div class="meta"><span class="badge">${esc(tz(r.cat))}</span> <span class="badge">${t('ecg_rate')}: ${r.rate||'—'}</span></div>
+      <h3>${esc(tz(r.n))}</h3>
+      <p>${esc(tz(r.findings))}</p>
       <h3 style="font-size:.9rem;color:var(--muted)">${t('ecg_steps')}</h3>
-      <table><tbody>${r.steps.map(s=>`<tr><td style="width:140px"><b>${esc(s[0])}</b></td><td>${esc(s[1])}</td></tr>`).join('')}</tbody></table>
+      <table><tbody>${r.steps.map(s=>`<tr><td style="width:140px"><b>${esc(tz(s[0]))}</b></td><td>${esc(tz(s[1]))}</td></tr>`).join('')}</tbody></table>
     </div>`;
   };
   $$('#ecg-list [data-e]').forEach(b=>b.onclick=()=>{ ecgQuiz=null; show(window.ECGS.find(e=>e.id===b.dataset.e)); });
   $('#ecg-quiz-start').onclick = ()=>{ ecgQuiz = window.ECGS[Math.floor(Math.random()*window.ECGS.length)];
     ECGRen.start(cv, ecgQuiz, S.theme);
     $('#ecg-info').innerHTML = `<div class="card"><h3>${ic('info')} ${t('ecg_quiz')}</h3>
-      <div class="chiprow">${window.ECGS.map(e=>`<button class="chip" data-g="${e.id}">${esc(e.n)}</button>`).join('')}</div>
+      <div class="chiprow">${window.ECGS.map(e=>`<button class="chip" data-g="${e.id}">${esc(tz(e.n))}</button>`).join('')}</div>
       <div id="ecg-quiz-res"></div></div>`;
     $$('#ecg-info [data-g]').forEach(b=>b.onclick=()=>{
       const ok = b.dataset.g === ecgQuiz.id;
       $('#ecg-quiz-res').innerHTML = ok
-        ? `<p class="badge ok">${t('ecg_correct')} — ${esc(ecgQuiz.n)}</p>`
-        : `<p class="badge bad">${t('ecg_wrong')}. ${t('ecg_rhythm')}: <b>${esc(ecgQuiz.n)}</b></p>`;
+        ? `<p class="badge ok">${t('ecg_correct')} — ${esc(tz(ecgQuiz.n))}</p>`
+        : `<p class="badge bad">${t('ecg_wrong')}. ${t('ecg_rhythm')}: <b>${esc(tz(ecgQuiz.n))}</b></p>`;
       setTimeout(()=>show(ecgQuiz), 900);
     }); };
   $('#ecg-snd').onclick = function(){
     sndOn = !sndOn;
-    this.innerHTML = ic('headphones') + ' Звук: ' + (sndOn ? 'вкл' : 'выкл');
+    this.innerHTML = ic('headphones') + ' ' + t(sndOn ? 'snd_on' : 'snd_off');
     this.classList.toggle('on', sndOn);
     if (curHandle && curHandle.setBeep) curHandle.setBeep(sndOn);
   };
@@ -1874,23 +1899,23 @@ ROUTES.atlas.after = function(){
     const items = window.ATLAS.filter(a=>cat==='all'||a.cat===cat);
     $('#atlas-grid').innerHTML = items.map(a=>`<div class="atlas-item" data-a="${a.id}">
       ${a.img
-        ? `<img src="${a.img}" alt="${esc(a.t)}" loading="lazy">`
+        ? `<img src="${a.img}" alt="${esc(tz(a.t))}" loading="lazy">`
         : `<canvas width="440" height="330"></canvas>`}
-      <div class="cap"><div class="cat">${esc(a.cat)}</div>${esc(a.t)}</div></div>`).join('');
+      <div class="cap"><div class="cat">${esc(t('cat_'+a.cat))}</div>${esc(tz(a.t))}</div></div>`).join('');
     $('#atlas-grid').querySelectorAll('.atlas-item').forEach(el=>{
       const a = window.ATLAS.find(x=>x.id===el.dataset.a);
       if (a.img){
         const im = el.querySelector('img');
         im.onerror = ()=>{ im.onerror=null; fallback(im, a, 440, 330); };
-        el.onclick = ()=>dlg(`<h3>${esc(a.t)}</h3>
+        el.onclick = ()=>dlg(`<h3>${esc(tz(a.t))}</h3>
           <img src="${a.img}" style="width:100%;border-radius:10px;display:block" alt="">
-          <p><b>${t('atlas_find')}:</b> ${esc(a.find)}</p><p><b>${t('atlas_teach')}:</b> ${esc(a.teach)}</p>
+          <p><b>${t('atlas_find')}:</b> ${esc(tz(a.find))}</p><p><b>${t('atlas_teach')}:</b> ${esc(tz(a.teach))}</p>
           <p class="muted" style="font-size:.8rem">${t('atlas_note')}</p>
           <p><button class="btn" data-close>${t('close')}</button></p>`);
       } else {
         ATLAS_DRAW[a.id](el.querySelector('canvas').getContext('2d'), 440, 330);
-        el.onclick = ()=>dlg(`<h3>${esc(a.t)}</h3><canvas id="ad-cv" width="560" height="400" style="width:100%;background:#0b0e13;border-radius:10px"></canvas>
-          <p><b>${t('atlas_find')}:</b> ${esc(a.find)}</p><p><b>${t('atlas_teach')}:</b> ${esc(a.teach)}</p>
+        el.onclick = ()=>dlg(`<h3>${esc(tz(a.t))}</h3><canvas id="ad-cv" width="560" height="400" style="width:100%;background:#0b0e13;border-radius:10px"></canvas>
+          <p><b>${t('atlas_find')}:</b> ${esc(tz(a.find))}</p><p><b>${t('atlas_teach')}:</b> ${esc(tz(a.teach))}</p>
           <p class="muted" style="font-size:.8rem">${t('atlas_note')}</p>
           <p><button class="btn" data-close>${t('close')}</button></p>`);
       }
@@ -1925,18 +1950,19 @@ ROUTES.patient.after = function(){
   function renderCase(c){
     const others = window.CASES.filter(x=>x.dx!==c.dx).sort(()=>Math.random()-0.5).slice(0,5).map(x=>x.dx);
     const opts = [c.dx, ...others].sort(()=>Math.random()-0.5);
+    const sexL = c.sex === 'Ж' ? t('sex_f') : t('sex_m');
     const vt = c.vitals;
     $('#pt-case').innerHTML = `
     <div class="entry">
-      <div class="meta"><span class="badge">${t('pat_age')}: ${c.age}</span><span class="badge">${c.sex}</span></div>
-      <p><b>${t('pat_cc')}:</b> ${esc(c.cc)}</p>
-      <p><b>${t('pat_hist')}:</b> ${esc(c.hist)}</p>
-      <p><b>${t('pat_exam')}:</b> ${esc(c.exam)}</p>
+      <div class="meta"><span class="badge">${t('pat_age')}: ${c.age}</span><span class="badge">${sexL}</span></div>
+      <p><b>${t('pat_cc')}:</b> ${esc(tz(c.cc))}</p>
+      <p><b>${t('pat_hist')}:</b> ${esc(tz(c.hist))}</p>
+      <p><b>${t('pat_exam')}:</b> ${esc(tz(c.exam))}</p>
       <h3>${t('pat_vitals')}</h3>
       <div class="vitals">
-        <div class="vital"><div class="v">${vt.bp}</div><div class="l">АД</div></div>
-        <div class="vital ${vt.hr>100||vt.hr<55?'abn':''}"><div class="v">${vt.hr}</div><div class="l">ЧСС</div></div>
-        <div class="vital ${vt.rr>20?'abn':''}"><div class="v">${vt.rr}</div><div class="l">ЧДД</div></div>
+        <div class="vital"><div class="v">${vt.bp}</div><div class="l">${t('vit_bp')}</div></div>
+        <div class="vital ${vt.hr>100||vt.hr<55?'abn':''}"><div class="v">${vt.hr}</div><div class="l">${t('vit_hr')}</div></div>
+        <div class="vital ${vt.rr>20?'abn':''}"><div class="v">${vt.rr}</div><div class="l">${t('vit_rr')}</div></div>
         <div class="vital ${vt.t>37?'abn':''}"><div class="v">${vt.t}</div><div class="l">t°C</div></div>
         <div class="vital ${vt.spo2<94?'abn':''}"><div class="v">${vt.spo2}%</div><div class="l">SpO₂</div></div>
       </div>
@@ -1953,9 +1979,9 @@ ROUTES.patient.after = function(){
         </div>
       </div>
       <h3>${t('pat_labs')}</h3>
-      <div class="table-wrap"><table><tbody>${c.labs.map(l=>`<tr class="lab-row"><td>${esc(l[0])}</td><td class="${l[2]?'':'abn'}">${esc(l[1])}</td></tr>`).join('')}</tbody></table></div>
+      <div class="table-wrap"><table><tbody>${c.labs.map(l=>`<tr class="lab-row"><td>${esc(tz(l[0]))}</td><td class="${l[2]?'':'abn'}">${esc(tzu(tz(l[1])))}</td></tr>`).join('')}</tbody></table></div>
       <h3 style="margin-top:14px">${t('pat_dx')}</h3>
-      <select id="pt-dx">${opts.map(o=>`<option>${esc(o)}</option>`).join('')}</select>
+      <select id="pt-dx">${opts.map(o=>`<option value="${esc(o)}">${esc(tz(o))}</option>`).join('')}</select>
       <p style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn" id="pt-check">${ic('check')} ${t('pat_submit')}</button>
         <button class="btn secondary" id="pt-reveal">${t('pat_reveal')}</button>
@@ -1977,8 +2003,8 @@ ROUTES.patient.after = function(){
     };
     $('#pt-reveal').onclick = ()=>{ S.patient.attempted++; save(); $('#pt-verdict').innerHTML='<div id="pt-expl"></div>'; reveal(); };
     function reveal(){
-      $('#pt-expl').innerHTML = `<div class="card"><h3>${ic('check')} ${t('pat_showcase')}: ${esc(c.dx)}</h3>
-        <p><b>${t('p_diff')}:</b> ${esc(c.ddx.join('; '))}</p><p>${esc(c.explain)}</p></div>`;
+      $('#pt-expl').innerHTML = `<div class="card"><h3>${ic('check')} ${t('pat_showcase')}: ${esc(tz(c.dx))}</h3>
+        <p><b>${t('p_diff')}:</b> ${esc(c.ddx.map(tz).join('; '))}</p><p>${esc(tz(c.explain))}</p></div>`;
       $('#pt-verdict').parentElement.querySelectorAll('#pt-check,#pt-reveal').forEach(b=>b.disabled=true);
     }
   }
@@ -1990,7 +2016,7 @@ ROUTES.tests = function(){
   const subs = [...new Set(window.TESTS.map(x=>x.s))];
   return head(t('nav_tests'), t('test_hint')) + `
   <div class="card">
-    <div class="chiprow" id="t-sub">${subs.map((s,i)=>`<button class="chip ${i===0?'on':''}" data-s="${esc(s)}">${esc(s)}</button>`).join('')}</div>
+    <div class="chiprow" id="t-sub">${subs.map((s,i)=>`<button class="chip ${i===0?'on':''}" data-s="${esc(s)}">${esc(tz(s))}</button>`).join('')}</div>
     <p><button class="btn" id="t-start">${ic('play')} ${t('test_start')} (${t('test_mode_topic')})</button>
     <button class="btn secondary" id="t-exam">${ic('clock')} ${t('test_mode_exam')}</button></p>
   </div>
@@ -2011,10 +2037,10 @@ ROUTES.tests.after = function(){
     if (st.examMode && Date.now()>st.deadline) return finish();
     $('#t-area').innerHTML = `<div class="card">
       <div class="meta" style="display:flex;gap:10px;color:var(--muted);font-size:.8rem;margin-bottom:8px">
-        <span class="badge">${esc(q.s)}</span><span>${st.i+1} ${t('test_of')} ${st.qs.length}</span>
+        <span class="badge">${esc(tz(q.s))}</span><span>${st.i+1} ${t('test_of')} ${st.qs.length}</span>
         <span style="flex:1"></span>${st.examMode?`<b id="t-timer"></b>`:''}<span>${ic('check')} ${st.score}</span></div>
-      <h3>${esc(q.q)}</h3>
-      ${q.o.map((o,i)=>`<p><button class="chip" style="width:100%;justify-content:flex-start;text-align:left" data-o="${i}">${String.fromCharCode(65+i)}. ${esc(o)}</button></p>`).join('')}
+      <h3>${esc(tz(q.q))}</h3>
+      ${q.o.map((o,i)=>`<p><button class="chip" style="width:100%;justify-content:flex-start;text-align:left" data-o="${i}">${String.fromCharCode(65+i)}. ${esc(tz(o))}</button></p>`).join('')}
     </div>`;
     if (st.examMode){ const tm = setInterval(()=>{ const el=$('#t-timer'); if (!el){clearInterval(tm);return;}
       const left = st.deadline-Date.now();
@@ -2037,15 +2063,15 @@ ROUTES.tests.after = function(){
       <h2>${t('test_score')}: ${st.score} / ${st.qs.length} (${pct}%)</h2>
       <div class="progressbar" style="max-width:300px;margin:10px auto"><div style="width:${pct}%"></div></div>
       ${st.wrong.length?`<h3>${ic('x')} ${st.wrong.length}</h3>${st.wrong.map(q=>`<div class="entry tight" style="text-align:left">
-        <b>${esc(q.q)}</b><div class="comment">${ic('check')} ${t('test_correct_answer')}: ${esc(q.o[q.a])}</div>
-        <div class="comment">${esc(q.e)}</div></div>`).join('')}`:''}
+        <b>${esc(tz(q.q))}</b><div class="comment">${ic('check')} ${t('test_correct_answer')}: ${esc(tz(q.o[q.a]))}</div>
+        <div class="comment">${esc(tz(q.e))}</div></div>`).join('')}`:''}
       <p><button class="btn" id="t-again">${ic('refresh')} ${t('test_again')}</button>
       <button class="btn secondary" id="t-pdf">${ic('download')} PDF</button></p></div>`;
     $('#t-again').onclick = ()=>go('tests');
     $('#t-pdf').onclick = ()=>PDFX.download('medhub-test.pdf', t('test_score'), [
       {kv:[t('test_score'), `${st.score} / ${st.qs.length} (${pct}%)`]},
       {table:{head:['№', t('test_correct_answer'), t('test_explain')],
-        rows:st.wrong.map((q,i)=>[i+1, q.o[q.a], q.e])}}]);
+        rows:st.wrong.map((q,i)=>[i+1, tz(q.o[q.a]), tz(q.e)])}}]);
   }
   $('#t-start').onclick = ()=>run(window.TESTS.filter(x=>x.s===sub), false);
   $('#t-exam').onclick = ()=>run(window.TESTS, true);
@@ -2066,14 +2092,14 @@ ROUTES.cards = function(){
   <div class="card">
     <h3>${t('cards_add')}</h3>
     <div class="formrow g2">
-      <div><label class="f">${t('cards_deck')}</label><input type="text" id="c-deck" list="decks" value="Мои"><datalist id="decks">
-        ${[...new Set([...S.cards.map(c=>c.deck),...window.STARTER_DECK.map(c=>c.d)])].map(d=>`<option>${esc(d)}</option>`).join('')}</datalist></div>
-      <div><label class="f">${t('subject')} (необяз.)</label><select id="c-sub"><option value="">—</option>${window.SUBJECTS.map(s=>`<option>${esc(s.n)}</option>`).join('')}</select></div>
+      <div><label class="f">${t('cards_deck')}</label><input type="text" id="c-deck" list="decks" value="${esc(t('deck_mine'))}"><datalist id="decks">
+        ${[...new Set([...S.cards.map(c=>tz(c.deck)),...window.STARTER_DECK.map(c=>tz(c.d))])].map(d=>`<option>${esc(d)}</option>`).join('')}</datalist></div>
+      <div><label class="f">${t('subject')} (${t('optional')})</label><select id="c-sub"><option value="">—</option>${window.SUBJECTS.map(s=>`<option value="${esc(s.n)}">${esc(tz(s.n))}</option>`).join('')}</select></div>
     </div>
     <label class="f">${t('cards_front')}</label><textarea id="c-front"></textarea>
     <label class="f">${t('cards_back')}</label><textarea id="c-back"></textarea>
     <p><button class="btn" id="c-add">＋ ${t('add')}</button>
-    <button class="btn secondary" id="c-import">${ic('download')} ${t('cards_deck')}: стартовый набор</button></p>
+    <button class="btn secondary" id="c-import">${ic('download')} ${t('cards_deck')}: ${t('cards_starter')}</button></p>
   </div>
   <div id="card-area"></div>`;
 };
@@ -2081,14 +2107,14 @@ ROUTES.cards.after = function(){
   $('#c-add').onclick = ()=>{
     const f=$('#c-front').value.trim(), b=$('#c-back').value.trim();
     if (!f||!b) return toast(t('required'));
-    S.cards.push({id:uid(), deck:$('#c-deck').value.trim()||'Мои', sub:$('#c-sub').value, f, b});
+    S.cards.push({id:uid(), deck:$('#c-deck').value.trim()||t('deck_mine'), sub:$('#c-sub').value, f, b});
     save(); toast(t('card_added')); go('cards');
   };
   $('#c-import').onclick = ()=>{
     let added = 0;
     for (const c of window.STARTER_DECK){
-      if (S.cards.some(x=>x.f===c.f)) continue;
-      S.cards.push({id:uid(), deck:c.d, f:c.f, b:c.b}); added++;
+      if (S.cards.some(x=>x.f===c.f || x.f===tz(c.f))) continue;
+      S.cards.push({id:uid(), deck:tz(c.d), f:tz(c.f), b:tz(c.b)}); added++;   /* в uz — сразу узбекский текст */
     }
     save(); toast(`+${added} · ${t('added')}`); go('cards');
   };
@@ -2098,7 +2124,7 @@ ROUTES.cards.after = function(){
   let shown = null, revealed = false;
   function next(){
     shown = due[0]; revealed = false;
-    area.innerHTML = `<div class="flash"><div class="flash-inner" id="fl"><div class="q">${esc(shown.f)}<div class="muted" style="font-size:.75rem;margin-top:10px">${esc(shown.deck)} · ${t('cards_show')}</div></div></div></div>
+    area.innerHTML = `<div class="flash"><div class="flash-inner" id="fl"><div class="q">${esc(tz(shown.f))}<div class="muted" style="font-size:.75rem;margin-top:10px">${esc(tz(shown.deck))} · ${t('cards_show')}</div></div></div></div>
       <div class="rate-row hidden" id="rr">
         <button class="btn danger" data-r="0">${t('cards_again')}</button>
         <button class="btn secondary" data-r="1">${t('cards_hard')}</button>
@@ -2107,7 +2133,7 @@ ROUTES.cards.after = function(){
       </div>
       <p style="text-align:center"><button class="btn small danger" data-skip="1">${ic('trash')} ${t('delete')}</button></p>`;
     $('#fl').onclick = ()=>{ if (revealed) return; revealed = true;
-      $('#fl').innerHTML = `<div class="a">${esc(shown.b)}<div class="muted" style="font-size:.75rem;margin-top:10px">${esc(shown.f)}</div></div>`;
+      $('#fl').innerHTML = `<div class="a">${esc(tz(shown.b))}<div class="muted" style="font-size:.75rem;margin-top:10px">${esc(tz(shown.f))}</div></div>`;
       $('#rr').classList.remove('hidden'); };
     $$('#rr [data-r]').forEach(b=>b.onclick=()=>{
       const lvl = (S.srs[shown.id]?.iv ?? -1) + 1;
@@ -2129,7 +2155,7 @@ ROUTES.curation = function(){
   <div class="card"><h3>${t('cur_new')}</h3>
     <div class="formrow g2">
       <div><label class="f">${t('pat_age')}</label><input type="number" id="cur-age" min="0" max="120"></div>
-      <div><label class="f">${t('pat_sex')}</label><select id="cur-sex"><option>М</option><option>Ж</option></select></div>
+      <div><label class="f">${t('pat_sex')}</label><select id="cur-sex"><option value="М">${t('sex_m')}</option><option value="Ж">${t('sex_f')}</option></select></div>
     </div>
     <label class="f">${t('cur_cc')}</label><textarea id="cur-cc"></textarea>
     <label class="f">${t('cur_anam')}</label><textarea id="cur-anam"></textarea>
@@ -2161,7 +2187,7 @@ ROUTES.curation.after = function(){
     if (!d.cc && !d.diag) return toast(t('required'));
     S.diary.push(Object.assign({id:uid()}, d)); save(); toast(t('saved')); go('curation');
     if (post && S.group) api(`/groups/${S.group.code}/entries`,{method:'POST',body:{type:'diary',
-      authorId:S.group.me.id, authorName:S.group.me.name, title:`Курация: ${d.diag||''}`, 
+      authorId:S.group.me.id, authorName:S.group.me.name, title:`${t('cur_entry')}: ${d.diag||''}`, 
       body:`${d.sex}, ${d.age}\n${t('cur_cc')}: ${d.cc}\n${t('cur_diag')}: ${d.diag}\n${t('cur_plan')}: ${d.plan}`,
       meta:{}, visibility:d.visibility}}).catch(()=>{});
   };
@@ -2171,13 +2197,13 @@ ROUTES.curation.after = function(){
     S.diary.push(Object.assign({id:uid()}, d)); save();
     if (!S.group){
       S.localFeed.diary = S.localFeed.diary||[];
-      S.localFeed.diary.unshift({id:uid(), ts:Date.now(), authorName:'Я', title:`Курация: ${d.diag||''}`,
+      S.localFeed.diary.unshift({id:uid(), ts:Date.now(), authorName:'Я', title:`${t('cur_entry')}: ${d.diag||''}`,
         body:`${d.sex}, ${d.age}\n${t('cur_cc')}: ${d.cc}\n${t('cur_diag')}: ${d.diag}\n${t('cur_plan')}: ${d.plan}`,
         meta:{}, visibility:d.visibility});
       save(); toast(t('saved')); return go('curation');
     }
     api(`/groups/${S.group.code}/entries`,{method:'POST',body:{type:'diary', authorId:S.group.me.id,
-      authorName:S.group.me.name, title:`Курация: ${d.diag||''}`,
+      authorName:S.group.me.name, title:`${t('cur_entry')}: ${d.diag||''}`,
       body:`${d.sex}, ${d.age}\n${t('cur_cc')}: ${d.cc}\n${t('cur_diag')}: ${d.diag}\n${t('cur_plan')}: ${d.plan}`,
       meta:{}, visibility:d.visibility}}).then(()=>{toast(t('posted')); go('curation');}).catch(e=>toast(e.message));
   };
@@ -2215,9 +2241,9 @@ ROUTES.skills = function(){
     <div class="stat"><div class="num">${S.group?S.group.name:'—'}</div><div class="lbl">${t('skills_progress')}</div>
       ${S.group?`<p><button class="btn small secondary" id="sk-share">${ic('send')} ${t('feed_post')}</button></p>`:`<p class="muted" style="font-size:.8rem">${t('set_group_join')}</p>`}</div>
   </div>
-  ${groups.map(g=>`<div class="card"><h3>${esc(g)}</h3>
+  ${groups.map(g=>`<div class="card"><h3>${esc(tz(g))}</h3>
     ${window.SKILLS.filter(s=>s.g===g).map(s=>{ const v = S.skills[s.n]||0;
-      return `<div class="skill-row"><span class="n">${esc(s.n)}</span>
+      return `<div class="skill-row"><span class="n">${esc(tz(s.n))}</span>
       <div class="seg" data-sk="${esc(s.n)}">
         <button class="${v===0?'on':''}" data-v="0">${t('sk_watched')}</button>
         <button class="${v===1?'on':''}" data-v="1">${t('sk_assisted')}</button>
@@ -2230,10 +2256,10 @@ ROUTES.skills.after = function(){
     S.skills[seg.dataset.sk] = +b.dataset.v; save(); go('skills'); }));
   $('#sk-pdf').onclick = ()=>PDFX.download('medhub-navyki.pdf', t('nav_skills'),
     [{table:{head:[t('subject'),t('sk_watched')+'/'+t('sk_assisted')+'/'+t('sk_independent')],
-      rows:window.SKILLS.map(sk=>[sk.g+' — '+sk.n, [t('sk_watched'),t('sk_assisted'),t('sk_independent')][S.skills[sk.n]||0]])}}]);
+      rows:window.SKILLS.map(sk=>[tz(sk.g)+' — '+tz(sk.n), [t('sk_watched'),t('sk_assisted'),t('sk_independent')][S.skills[sk.n]||0]])}}]);
   const sh = $('#sk-share');
   if (sh) sh.onclick = async ()=>{
-    const done = Object.entries(S.skills).filter(([,v])=>v===2).map(([k])=>k);
+    const done = Object.entries(S.skills).filter(([,v])=>v===2).map(([k])=>tz(k));
     if (!S.group){
       S.localFeed.diary = S.localFeed.diary||[];
       S.localFeed.diary.unshift({id:uid(), ts:Date.now(), authorName:'Я',
@@ -2263,7 +2289,7 @@ ROUTES.ops = function(){
       <div><label class="f">${t('date')}</label><input type="date" id="o-date" value="${todayISO()}"></div>
       <div><label class="f">${t('ops_role')}</label><select id="o-role"><option value="observer">${t('ops_observer')}</option><option value="assistant">${t('ops_assistant')}</option></select></div>
     </div>
-    <label class="f">${t('ops_operation')}</label><input type="text" id="o-op" placeholder="ЛХЭ, аппендэктомия, кесарево…">
+    <label class="f">${t('ops_operation')}</label><input type="text" id="o-op" placeholder="${esc(t('ops_ph'))}">
     <label class="f">${t('notes')}</label><textarea id="o-notes"></textarea>
     ${visSelect('private')}
     <p><button class="btn" id="o-add">＋ ${t('add')}</button>
@@ -2292,7 +2318,7 @@ ROUTES.ops.after = function(){
 ROUTES.cases = function(){
   return head(t('nav_cases'), t('cases_hint')) + `
   <div class="card"><h3>${t('case_new')}</h3>
-    <label class="f">${t('title')}</label><input type="text" id="cs-title" placeholder="Кейс: боль в животе у подростка">
+    <label class="f">${t('title')}</label><input type="text" id="cs-title" placeholder="${esc(t('cs_title_ph'))}">
     <label class="f">${t('body')}</label><textarea id="cs-body" style="min-height:110px"></textarea>
     <p><button class="btn" id="cs-post">${ic('send')} ${t('feed_post')}</button></p>
   </div>
@@ -2346,7 +2372,7 @@ ROUTES.reflect = function(){
     <label class="f">${t('refl_sit')}</label><textarea id="r-sit"></textarea>
     <label class="f">${t('refl_err')}</label><textarea id="r-err"></textarea>
     <label class="f">${t('refl_lesson')}</label><textarea id="r-lesson"></textarea>
-    <label class="f">${t('refl_topics')} (через запятую)</label><input type="text" id="r-topics">
+    <label class="f">${t('refl_topics')} (${t('comma_sep')})</label><input type="text" id="r-topics">
     <p><button class="btn" id="r-add">${ic('save')} ${t('save')}</button></p>
   </div>
   <div class="card"><p><button class="btn secondary small" id="refl-pdf">${ic('download')} PDF</button></p>
@@ -2376,7 +2402,7 @@ ROUTES.reflect.after = function(){
     const r = S.reflect.find(x=>x.id===b.dataset.tocard); if (!r) return;
     for (const tp of r.topics){
       if (S.cards.some(c=>c.f===tp)) continue;
-      S.cards.push({id:uid(), deck:'Повторение', f:tp, b:(r.lesson||r.err||'').slice(0,200)});
+      S.cards.push({id:uid(), deck:t('deck_review'), f:tp, b:(r.lesson||r.err||'').slice(0,200)});
     }
     save(); toast(t('card_added'));
   });
@@ -2394,7 +2420,7 @@ ROUTES.duty = function(){
   <div class="card"><h3>${t('duty_shift')}</h3>
     <div class="formrow g2">
       <div><label class="f">${t('date')}</label><input type="date" id="d-date" value="${todayISO()}"></div>
-      <div><label class="f">${t('duty_place')}</label><input type="text" id="d-place" placeholder="Приёмное, ОРИТ, терапия…"></div>
+      <div><label class="f">${t('duty_place')}</label><input type="text" id="d-place" placeholder="${esc(t('duty_place_ph'))}"></div>
       <div><label class="f">${t('duty_from')}</label><input type="time" id="d-from" value="08:00"></div>
       <div><label class="f">${t('duty_to')}</label><input type="time" id="d-to" value="08:00"></div>
     </div>
@@ -2506,7 +2532,7 @@ ROUTES.setgroup.after = function(){
   Store.ready.then(()=>{
     if (Store.isStatic()){
       const box = $('#static-note');
-      if (box) box.innerHTML = `${ic('box')} <b>Статический режим</b>: сайт развёрнут без сервера, поэтому группы, ленты и синхронизация хранятся только в этом браузере. Для обмена между устройствами задеплойте Node-версию (README → «Вариант Б») или запустите <code>npm start</code>.`;
+      if (box) box.innerHTML = `${ic('box')} ${t('static_note')}`;
     }
   });
   const mem = $('#grp-members');
@@ -2546,16 +2572,16 @@ ROUTES.setlook.after = function(){
 ROUTES.setdata = function(){
   return head(t('nav_data')) + `
   <div class="card"><h3>${ic('download')} ${t('set_offline')}</h3>
-    <p class="muted" style="font-size:.85rem">МКБ, препараты, нормы, протоколы, калькуляторы, тесты и кейсы уже встроены в приложение и работают без интернета. Нажмите, чтобы закрепить кэш.</p>
+    <p class="muted" style="font-size:.85rem">${t('offline_note')}</p>
     <p><button class="btn" id="off-dl">${S.basesOffline?ic('check')+' ':ic('download')+' '}${t('offline_dl')}</button></p>
   </div>
   <div class="card"><h3>${ic('save')} ${t('backup')}</h3>
     <p><button class="btn secondary" id="bk-export">${ic('download')} ${t('backup_export')}</button>
     <label class="btn secondary" style="cursor:pointer">${ic('upload')} ${t('backup_import')}<input type="file" id="bk-import" accept=".json" hidden></label></p>
     <label class="f">${t('sync_key')}</label>
-    <div style="display:flex;gap:8px"><input type="text" id="bk-key" value="${esc(S.syncKey)}" placeholder="мой-ключ-2026">
+    <div style="display:flex;gap:8px"><input type="text" id="bk-key" value="${esc(S.syncKey)}" placeholder="${esc(t('sync_key_ph'))}">
     <button class="btn small" id="bk-up">${ic('upload')}</button><button class="btn small secondary" id="bk-down">${ic('download')}</button></div>
-    <p class="muted" style="font-size:.8rem">Синхронизация по ключу: тот же ключ на другом устройстве подтянет данные.</p>
+    <p class="muted" style="font-size:.8rem">${t('sync_note')}</p>
   </div>
   <div class="card"><h3>${ic('doc')} ${t('export_pdf')}</h3>
     <p><button class="btn secondary" id="ex-diary-print">${ic('printer')} ${t('nav_diary')} → ${t('print')}</button>
@@ -3248,7 +3274,7 @@ ROUTES.board = function(){
       <canvas id="board-cv"></canvas>
       ${Board.html()}
     </div>
-    <p class="muted small board-tip">${ic('pen')} V/P/E/L/A/R/O/T/N — инструменты · Ctrl+Z / Ctrl+Y — отмена · Delete — удалить выбранное · колесо — двигать · Ctrl+колесо — зум · двойной клик — править текст</p>
+    <p class="muted small board-tip">${ic('pen')} ${t('board_tip')}</p>
   </div>`;
 };
 ROUTES.board.after = function(){ Board.mount(); };
@@ -3292,7 +3318,7 @@ const Auth = (function(){
     if (view === 'create'){
       box.innerHTML = `
         <h3 style="margin-top:0">${ic('crown')} ${t('auth_create_title')}</h3>
-        <label class="f">${t('group_name')}</label><input type="text" id="au-name" placeholder="Лечебный 4 курс, группа 12">
+        <label class="f">${t('group_name')}</label><input type="text" id="au-name" placeholder="${esc(t('group_name_ph'))}">
         <label class="f">${t('your_name')}</label><input type="text" id="au-me" placeholder="${t('auth_ph_teacher')}">
         <div class="auth-actions"><button class="btn" id="au-go">${t('set_group_create')}</button>
         <button class="btn secondary" id="au-back">${t('auth_back')}</button></div>`;
@@ -3450,7 +3476,7 @@ const AI = (function(){
     $('#ai-send').onclick = ()=>send($('#ai-q').value);
     $('#ai-q').addEventListener('keydown', e=>{ if (e.key==='Enter') send($('#ai-q').value); });
     $('#ai-close').onclick = ()=>$('#ai-panel').classList.add('hidden');
-    $('#ai-keysave').onclick = ()=>{ const v=$('#ai-keyin').value.trim(); if(!v) return toast(t('required')); S.groqKey=v; save(); $('#ai-keyline').classList.add('hidden'); toast(t('saved')); send('Привет! Что ты умеешь?'); };
+    $('#ai-keysave').onclick = ()=>{ const v=$('#ai-keyin').value.trim(); if(!v) return toast(t('required')); S.groqKey=v; save(); $('#ai-keyline').classList.add('hidden'); toast(t('saved')); send(t('ai_hello')); };
     document.addEventListener('click', e=>{
       const p = $('#ai-panel');
       if (!p.classList.contains('hidden') && !e.target.closest('#ai-panel') && !e.target.closest('#ai-btn'))
