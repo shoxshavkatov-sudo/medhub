@@ -2011,36 +2011,60 @@ ROUTES.patient.after = function(){
 };
 
 /* ---------- TESTS ---------- */
+/* клинические вопросы (js/tests-more.js, RU + UZ в каждом вопросе) — грузятся при входе в раздел */
+const TESTS_MORE_V = '20261113a';
+const TestsMore = (function(){
+  let p = null;
+  function load(){
+    if (!p) p = new Promise(res => { const sc = document.createElement('script');
+      sc.src = ASSET_BASE + 'js/tests-more.js?v=' + TESTS_MORE_V; sc.onload = sc.onerror = () => res(); document.head.appendChild(sc); });
+    return p;
+  }
+  return {load, ready: () => !!window.TESTS_MORE};
+})();
+const allTests = () => window.TESTS.concat(window.TESTS_MORE || []);
+const testSubj = s => (S.lang === 'uz' && window.TEST_SUBJ_UZ && window.TEST_SUBJ_UZ[s]) || tz(s);
+/* вопрос на языке сайта: у клинических — поле uz, у базовых — словарь UZT */
+const tL = x => { const u = S.lang === 'uz' && x.uz;
+  return {s: testSubj(x.s), q: u ? u.q : tz(x.q), o: u ? u.o : x.o.map(tz), e: u ? u.e : tz(x.e)}; };
 let testState = null;
 ROUTES.tests = function(){
-  const subs = [...new Set(window.TESTS.map(x=>x.s))];
+  const subsOf = arr => [...new Set(arr.map(x=>x.s))];
+  const chips = (arr, first) => subsOf(arr).map((s,i)=>`<button class="chip ${first&&i===0?'on':''}" data-s="${esc(s)}">${esc(testSubj(s))}</button>`).join('');
   return head(t('nav_tests'), t('test_hint')) + `
   <div class="card">
-    <div class="chiprow" id="t-sub">${subs.map((s,i)=>`<button class="chip ${i===0?'on':''}" data-s="${esc(s)}">${esc(tz(s))}</button>`).join('')}</div>
+    <div class="t-grp muted">${t('test_preclin')}</div>
+    <div class="chiprow" id="t-sub">${chips(window.TESTS, true)}</div>
+    <div class="t-grp muted">${t('test_clin')}</div>
+    <div class="chiprow" id="t-sub2">${window.TESTS_MORE ? chips(window.TESTS_MORE, false) : `<span class="muted">${t('loading')}</span>`}</div>
     <p><button class="btn" id="t-start">${ic('play')} ${t('test_start')} (${t('test_mode_topic')})</button>
     <button class="btn secondary" id="t-exam">${ic('clock')} ${t('test_mode_exam')}</button></p>
   </div>
   <div id="t-area"></div>`;
 };
 ROUTES.tests.after = function(){
-  let sub = $$('#t-sub .chip')[0].dataset.s;
-  $$('#t-sub .chip').forEach(b=>b.onclick=()=>{ sub=b.dataset.s;
-    $$('#t-sub .chip').forEach(x=>x.classList.toggle('on',x===b)); });
+  /* клинические вопросы ещё не загружены — догружаем и перерисовываем, если тест не начат */
+  if (!TestsMore.ready()) TestsMore.load().then(()=>{ if (currentRoute==='tests' && TestsMore.ready() && !$('#t-area').innerHTML.trim()) go('tests'); });
+  const chipsAll = () => $$('#t-sub .chip, #t-sub2 .chip');
+  let sub = chipsAll()[0].dataset.s;
+  chipsAll().forEach(b=>b.onclick=()=>{ sub=b.dataset.s;
+    chipsAll().forEach(x=>x.classList.toggle('on',x===b)); });
   function run(pool, examMode){
     const qs = pool.slice().sort(()=>Math.random()-0.5).slice(0, examMode?20:10);
     if (!qs.length) return toast(t('empty'));
     testState = {qs, i:0, score:0, wrong:[], examMode, deadline: examMode?Date.now()+25*60000:null};
     step();
+    $('#t-area').scrollIntoView({behavior:'smooth', block:'start'});   /* на телефоне вопрос ниже кнопок */
   }
   function step(){
-    const st = testState, q = st.qs[st.i];
+    const st = testState, q = st.qs[st.i], L = tL(q);
     if (st.examMode && Date.now()>st.deadline) return finish();
     $('#t-area').innerHTML = `<div class="card">
       <div class="meta" style="display:flex;gap:10px;color:var(--muted);font-size:.8rem;margin-bottom:8px">
-        <span class="badge">${esc(tz(q.s))}</span><span>${st.i+1} ${t('test_of')} ${st.qs.length}</span>
+        <span class="badge">${esc(L.s)}</span><span>${st.i+1} ${t('test_of')} ${st.qs.length}</span>
         <span style="flex:1"></span>${st.examMode?`<b id="t-timer"></b>`:''}<span>${ic('check')} ${st.score}</span></div>
-      <h3>${esc(tz(q.q))}</h3>
-      ${q.o.map((o,i)=>`<p><button class="chip" style="width:100%;justify-content:flex-start;text-align:left" data-o="${i}">${String.fromCharCode(65+i)}. ${esc(tz(o))}</button></p>`).join('')}
+      <h3>${esc(L.q)}</h3>
+      ${L.o.map((o,i)=>`<p><button class="chip t-opt" data-o="${i}">${String.fromCharCode(65+i)}. ${esc(o)}</button></p>`).join('')}
     </div>`;
     if (st.examMode){ const tm = setInterval(()=>{ const el=$('#t-timer'); if (!el){clearInterval(tm);return;}
       const left = st.deadline-Date.now();
@@ -2062,19 +2086,19 @@ ROUTES.tests.after = function(){
     $('#t-area').innerHTML = `<div class="card" style="text-align:center">
       <h2>${t('test_score')}: ${st.score} / ${st.qs.length} (${pct}%)</h2>
       <div class="progressbar" style="max-width:300px;margin:10px auto"><div style="width:${pct}%"></div></div>
-      ${st.wrong.length?`<h3>${ic('x')} ${st.wrong.length}</h3>${st.wrong.map(q=>`<div class="entry tight" style="text-align:left">
-        <b>${esc(tz(q.q))}</b><div class="comment">${ic('check')} ${t('test_correct_answer')}: ${esc(tz(q.o[q.a]))}</div>
-        <div class="comment">${esc(tz(q.e))}</div></div>`).join('')}`:''}
+      ${st.wrong.length?`<h3>${ic('x')} ${st.wrong.length}</h3>${st.wrong.map(q=>{ const L = tL(q); return `<div class="entry tight" style="text-align:left">
+        <b>${esc(L.q)}</b><div class="comment">${ic('check')} ${t('test_correct_answer')}: ${esc(L.o[q.a])}</div>
+        <div class="comment">${esc(L.e)}</div></div>`; }).join('')}`:''}
       <p><button class="btn" id="t-again">${ic('refresh')} ${t('test_again')}</button>
       <button class="btn secondary" id="t-pdf">${ic('download')} PDF</button></p></div>`;
     $('#t-again').onclick = ()=>go('tests');
     $('#t-pdf').onclick = ()=>PDFX.download('medhub-test.pdf', t('test_score'), [
       {kv:[t('test_score'), `${st.score} / ${st.qs.length} (${pct}%)`]},
       {table:{head:['№', t('test_correct_answer'), t('test_explain')],
-        rows:st.wrong.map((q,i)=>[i+1, tz(q.o[q.a]), tz(q.e)])}}]);
+        rows:st.wrong.map((q,i)=>{ const L = tL(q); return [i+1, L.q + ' — ' + L.o[q.a], L.e]; })}}]);
   }
-  $('#t-start').onclick = ()=>run(window.TESTS.filter(x=>x.s===sub), false);
-  $('#t-exam').onclick = ()=>run(window.TESTS, true);
+  $('#t-start').onclick = ()=>run(allTests().filter(x=>x.s===sub), false);
+  $('#t-exam').onclick = ()=>run(allTests(), true);
 };
 
 /* ---------- FLASHCARDS (SRS) ---------- */

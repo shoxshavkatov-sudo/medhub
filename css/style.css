@@ -137,6 +137,12 @@ tr:hover td{background:color-mix(in srgb,var(--panel2) 60%,transparent)}
 .comment{border-left:3px solid var(--line);padding:6px 10px;margin:8px 0 0;background:var(--panel2);border-radius:0 8px 8px 0;font-size:.86rem}
 .empty{color:var(--muted);text-align:center;padding:26px 10px;border:1px dashed var(--line);border-radius:var(--radius);background:var(--panel)}
 
+/* ---------- tests ---------- */
+.t-grp{font-size:.74rem;text-transform:uppercase;letter-spacing:.04em;margin:2px 0 6px}
+.t-grp+.chiprow{margin-bottom:12px}
+#t-area{scroll-margin-top:72px}
+.chip.t-opt{width:100%;justify-content:flex-start;text-align:left;white-space:normal;height:auto;line-height:1.35;padding:9px 12px;border-radius:14px}
+
 /* ---------- calendar ---------- */
 .cal-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin-bottom:8px}
 .cal-bar .cal-title{flex:1;text-align:center;font-size:1.05rem;white-space:nowrap}
