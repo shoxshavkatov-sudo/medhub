@@ -2049,53 +2049,88 @@ ROUTES.tests.after = function(){
   let sub = chipsAll()[0].dataset.s;
   chipsAll().forEach(b=>b.onclick=()=>{ sub=b.dataset.s;
     chipsAll().forEach(x=>x.classList.toggle('on',x===b)); });
+  /* ответы хранятся по вопросам (ans[i] — выбранный вариант или null): можно вернуться назад
+     и посмотреть разбор, пропустить вопрос и вернуться к нему; данный ответ не меняется */
+  const answered = st => st.ans.filter(a => a !== null).length;
+  const scoreOf = st => st.ans.reduce((n, a, i) => n + (a !== null && a === st.qs[i].a ? 1 : 0), 0);
+  const stopTimer = st => { if (st && st.timer){ clearInterval(st.timer); st.timer = null; } };
   function run(pool, examMode){
+    stopTimer(testState);
     const qs = pool.slice().sort(()=>Math.random()-0.5).slice(0, examMode?20:10);
     if (!qs.length) return toast(t('empty'));
-    testState = {qs, i:0, score:0, wrong:[], examMode, deadline: examMode?Date.now()+25*60000:null};
+    testState = {qs, i:0, ans:qs.map(()=>null), examMode, deadline: examMode?Date.now()+25*60000:null, timer:null, done:false};
+    if (examMode) testState.timer = setInterval(()=>{ const st = testState, el = $('#t-timer');
+      if (!st || st.done || !$('#t-area')){ stopTimer(st); return; }
+      const left = st.deadline-Date.now();
+      if (left<=0) return finish();
+      if (el) el.textContent = `⏱ ${Math.floor(left/60000)}:${String(Math.floor(left%60000/1000)).padStart(2,'0')}`; }, 500);
     step();
     $('#t-area').scrollIntoView({behavior:'smooth', block:'start'});   /* на телефоне вопрос ниже кнопок */
   }
   function step(){
-    const st = testState, q = st.qs[st.i], L = tL(q);
+    const st = testState, q = st.qs[st.i], L = tL(q), my = st.ans[st.i], n = st.qs.length;
     if (st.examMode && Date.now()>st.deadline) return finish();
+    const optCls = i => my === null ? '' : i === q.a ? 'on' : i === my ? 'bad' : '';
+    const dotCls = j => [j === st.i ? 'cur' : '', st.ans[j] === null ? '' : st.ans[j] === st.qs[j].a ? 'ok' : 'bad'].join(' ');
     $('#t-area').innerHTML = `<div class="card">
       <div class="meta" style="display:flex;gap:10px;color:var(--muted);font-size:.8rem;margin-bottom:8px">
-        <span class="badge">${esc(L.s)}</span><span>${st.i+1} ${t('test_of')} ${st.qs.length}</span>
-        <span style="flex:1"></span>${st.examMode?`<b id="t-timer"></b>`:''}<span>${ic('check')} ${st.score}</span></div>
+        <span class="badge">${esc(L.s)}</span><span>${st.i+1} ${t('test_of')} ${n}</span>
+        <span style="flex:1"></span>${st.examMode?`<b id="t-timer"></b>`:''}<span>${ic('check')} ${scoreOf(st)}</span></div>
+      <div class="t-map" aria-label="${esc(t('test_answered'))}">${st.qs.map((_,j)=>`<button class="t-dot ${dotCls(j)}" data-j="${j}" aria-label="${j+1}">${j+1}</button>`).join('')}</div>
       <h3>${esc(L.q)}</h3>
-      ${L.o.map((o,i)=>`<p><button class="chip t-opt" data-o="${i}">${String.fromCharCode(65+i)}. ${esc(o)}</button></p>`).join('')}
+      ${L.o.map((o,i)=>`<p><button class="chip t-opt ${optCls(i)}" data-o="${i}"${my!==null?' disabled':''}>${String.fromCharCode(65+i)}. ${esc(o)}</button></p>`).join('')}
+      ${my!==null && st.examMode===false ? `<div class="comment t-expl">${ic('info')} ${esc(L.e)}</div>` : ''}
+      <div class="t-nav">
+        <button class="btn secondary small" id="t-prev"${st.i===0?' disabled':''}>← ${t('test_prev')}</button>
+        <button class="btn secondary small" id="t-next"${st.i>=n-1?' disabled':''}>${t('test_next')} →</button>
+        <span style="flex:1"></span>
+        <button class="btn small t-stop" id="t-stop">■ ${t('test_stop')}</button>
+      </div>
     </div>`;
-    if (st.examMode){ const tm = setInterval(()=>{ const el=$('#t-timer'); if (!el){clearInterval(tm);return;}
-      const left = st.deadline-Date.now();
-      if (left<=0){ clearInterval(tm); finish(); }
-      else el.textContent = `⏱ ${Math.floor(left/60000)}:${String(Math.floor(left%60000/1000)).padStart(2,'0')}`; }, 500); }
+    const tm = $('#t-timer'); if (tm){ const left = st.deadline-Date.now();
+      tm.textContent = `⏱ ${Math.floor(left/60000)}:${String(Math.floor(left%60000/1000)).padStart(2,'0')}`; }
+    const goTo = j => { if (j < 0 || j >= n) return; st.i = j; step(); };
+    $('#t-prev').onclick = ()=>goTo(st.i-1);
+    $('#t-next').onclick = ()=>goTo(st.i+1);
+    $$('#t-area [data-j]').forEach(b=>b.onclick=()=>goTo(+b.dataset.j));
+    $('#t-stop').onclick = ()=>{ if (answered(st) === n || confirm(t('test_stop_confirm'))) finish(); };
     $$('#t-area [data-o]').forEach(b=>b.onclick=()=>{
-      const ok = +b.dataset.o === q.a;
-      if (ok) st.score++; else st.wrong.push(q);
+      if (st.ans[st.i] !== null) return;
+      const at = st.i, ok = +b.dataset.o === q.a;
+      st.ans[at] = +b.dataset.o;
       $$('#t-area [data-o]').forEach((x,i)=>{ x.disabled=true;
         if (i===q.a) x.classList.add('on');
         else if (x===b && !ok) x.classList.add('bad'); });
-      st.i++;
-      setTimeout(()=>{ st.i>=st.qs.length ? finish() : step(); }, ok?350:1100);
+      /* дальше — следующий неотвеченный вопрос; все отвечены — результат */
+      setTimeout(()=>{
+        if (testState !== st || st.done || st.i !== at) return;          // за это время ушли на другой вопрос
+        if (answered(st) === n) return finish();
+        let j = at + 1; while (j < n && st.ans[j] !== null) j++;
+        if (j >= n){ j = 0; while (st.ans[j] !== null) j++; }
+        goTo(j);
+      }, ok?350:1100);
     });
   }
   function finish(){
-    const st = testState;
-    const pct = Math.round(st.score/st.qs.length*100);
+    const st = testState; if (!st || st.done) return;
+    st.done = true; stopTimer(st);
+    const n = st.qs.length, done = answered(st), score = scoreOf(st);
+    const pct = done ? Math.round(score/done*100) : 0;
+    const wrong = st.qs.filter((q,i)=>st.ans[i] !== null && st.ans[i] !== q.a);
     $('#t-area').innerHTML = `<div class="card" style="text-align:center">
-      <h2>${t('test_score')}: ${st.score} / ${st.qs.length} (${pct}%)</h2>
+      <h2>${t('test_score')}: ${score} / ${done} (${pct}%)</h2>
+      ${done < n ? `<p class="muted">${t('test_answered')}: ${done} ${t('test_of')} ${n}</p>` : ''}
       <div class="progressbar" style="max-width:300px;margin:10px auto"><div style="width:${pct}%"></div></div>
-      ${st.wrong.length?`<h3>${ic('x')} ${st.wrong.length}</h3>${st.wrong.map(q=>{ const L = tL(q); return `<div class="entry tight" style="text-align:left">
+      ${wrong.length?`<h3>${ic('x')} ${wrong.length}</h3>${wrong.map(q=>{ const L = tL(q); return `<div class="entry tight" style="text-align:left">
         <b>${esc(L.q)}</b><div class="comment">${ic('check')} ${t('test_correct_answer')}: ${esc(L.o[q.a])}</div>
         <div class="comment">${esc(L.e)}</div></div>`; }).join('')}`:''}
       <p><button class="btn" id="t-again">${ic('refresh')} ${t('test_again')}</button>
       <button class="btn secondary" id="t-pdf">${ic('download')} PDF</button></p></div>`;
     $('#t-again').onclick = ()=>go('tests');
     $('#t-pdf').onclick = ()=>PDFX.download('medhub-test.pdf', t('test_score'), [
-      {kv:[t('test_score'), `${st.score} / ${st.qs.length} (${pct}%)`]},
+      {kv:[t('test_score'), `${score} / ${done} (${pct}%)`]},
       {table:{head:['№', t('test_correct_answer'), t('test_explain')],
-        rows:st.wrong.map((q,i)=>{ const L = tL(q); return [i+1, L.q + ' — ' + L.o[q.a], L.e]; })}}]);
+        rows:wrong.map((q,i)=>{ const L = tL(q); return [i+1, L.q + ' — ' + L.o[q.a], L.e]; })}}]);
   }
   $('#t-start').onclick = ()=>run(allTests().filter(x=>x.s===sub), false);
   $('#t-exam').onclick = ()=>run(allTests(), true);
