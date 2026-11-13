@@ -170,7 +170,7 @@ window.ECGRen = (function(){
      старый след остаётся «на бумаге», впереди — стирающая полоса.
      Морфология P-QRS-T — сумма гауссиан (реалистичные зубцы). */
   const W = 900, H = 300;
-  let raf = null;
+  let raf = null, halt = null;   // halt — остановить текущую развёртку (и rAF, и страхующий таймер)
 
   const G = (t, c, w, a) => a * Math.exp(-((t - c) * (t - c)) / (2 * w * w));
 
@@ -308,15 +308,19 @@ window.ECGRen = (function(){
       return y;
     }
 
-    let pending = false, kicker = null;
+    let pending = false, kicker = null, alive = true;
+    halt = () => { alive = false; pending = false; cancelAnimationFrame(raf); clearTimeout(kicker); raf = null; };
     function kick(){
-      if (pending) return;
+      if (pending || !alive) return;
       pending = true;
-      const run = ts => { if (!pending) return; pending = false; frame(ts); };
+      /* сработал один из двух вызовов — второй отменяем, иначе «лишние» вызовы копятся
+         и кадров становятся тысячи в секунду */
+      const run = ts => { if (!pending || !alive) return; pending = false; cancelAnimationFrame(raf); clearTimeout(kicker); frame(ts); };
       raf = requestAnimationFrame(run);
       kicker = setTimeout(() => run(performance.now()), 110);
     }
     function frame(ts){
+      if (!canvas.isConnected){ halt(); return; }   // холст убрали со страницы — развёртка больше не нужна
       window.__ecgFrames = (window.__ecgFrames||0)+1;
       try {
       if (!prev) prev = ts;
@@ -382,7 +386,9 @@ window.ECGRen = (function(){
       W, H
     };
   }
-  function stop(){ if (raf) cancelAnimationFrame(raf); raf = null; }
+  /* раньше отменялся только rAF, а страхующий setTimeout перезапускал цикл —
+     «невидимые» развёртки копились с каждым ритмом/пациентом */
+  function stop(){ if (halt){ halt(); halt = null; } else if (raf){ cancelAnimationFrame(raf); raf = null; } }
   return {start, stop, W, H};
 })();
 

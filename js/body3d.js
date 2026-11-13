@@ -31,8 +31,13 @@ window.Body3D = (function(){
     return [ (u-50)/50*0.30, 1.62*(1 - v/100), 0.14 ];
   }
 
+  /* живые сцены: при создании новой освобождаем те, чей холст уже убран со страницы
+     (смена пациента, переход по разделам) — иначе WebGL-контексты копятся */
+  let live = [];
+  function sweep(){ live = live.filter(x => { if (x.canvas.isConnected) return true; try { x.dispose(); } catch(_e){} return false; }); }
   function create(container, opts){
     opts = opts || {};
+    sweep();
     if (!window.THREE || !window.THREE.OrbitControls) return null;
     try { const t=document.createElement('canvas'); if (!t.getContext('webgl') && !t.getContext('experimental-webgl')) return null; } catch(e){ return null; }
     const THREE = window.THREE;
@@ -254,10 +259,14 @@ window.Body3D = (function(){
       controls.update();
       renderer.render(scene, camera);
     }
+    let disposed = false;
     function dispose(){
-      cancelAnimationFrame(raf);
+      if (disposed) return; disposed = true;
+      cancelAnimationFrame(raf); clearTimeout(kicker);
+      try { ro.disconnect(); } catch(_e){}
       controls.dispose();
       renderer.dispose();
+      try { renderer.forceContextLoss(); } catch(_e){}
       if (renderer.domElement.parentNode) renderer.domElement.parentNode.removeChild(renderer.domElement);
     }
     const ro = new ResizeObserver(()=>{
@@ -268,6 +277,7 @@ window.Body3D = (function(){
       renderer.setSize(w,h);
     });
     ro.observe(container);
+    live.push({canvas: renderer.domElement, dispose});
     kick();
 
     container._body3d = { setPoints, setSkin, _three:{scene,camera,renderer,body,markers} };
