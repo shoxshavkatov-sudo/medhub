@@ -2012,7 +2012,7 @@ ROUTES.patient.after = function(){
 
 /* ---------- TESTS ---------- */
 /* клинические вопросы (js/tests-more.js, RU + UZ в каждом вопросе) — грузятся при входе в раздел */
-const TESTS_MORE_V = '20261113a';
+const TESTS_MORE_V = '20261113b';
 const TestsMore = (function(){
   let p = null;
   function load(){
