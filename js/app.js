@@ -1933,39 +1933,88 @@ ROUTES.atlas.after = function(){
 };
 
 /* ---------- RANDOM PATIENT ---------- */
+/* ещё случаи (js/cases-more.js, RU + UZ в каждом) — грузятся при входе в раздел; направления — c.g или CASE_CAT */
+const CASES_MORE_V = '20261113a';
+const CasesMore = (function(){
+  let p = null;
+  function load(){
+    if (!p) p = new Promise(res => { const sc = document.createElement('script');
+      sc.src = ASSET_BASE + 'js/cases-more.js?v=' + CASES_MORE_V; sc.onload = sc.onerror = () => res(); document.head.appendChild(sc); });
+    return p;
+  }
+  return {load, ready: () => !!window.CASES_MORE};
+})();
+const CASE_GROUPS = ['ther', 'surg', 'ped', 'obg', 'neuro', 'emerg'];
+const allCases = () => window.CASES.concat(window.CASES_MORE || []);
+const caseGroup = c => c.g || (window.CASE_CAT || {})[c.dx] || 'ther';
+const caseAge = c => c.ay !== undefined ? c.ay : (typeof c.age === 'number' ? c.age : 30);
+/* случай на языке сайта: у новых — поле uz, у базовых — словарь UZT */
+function cL(c){
+  const u = S.lang === 'uz' && c.uz;
+  if (u) return {dx:u.dx, age:u.age || c.age, cc:u.cc, hist:u.hist, exam:u.exam, ddx:u.ddx, explain:u.explain,
+    labs:c.labs.map((l,i)=>[(u.labs[i]||[])[0] || l[0], (u.labs[i]||[])[1] || l[1], l[2]])};
+  return {dx:tz(c.dx), age:c.age, cc:tz(c.cc), hist:tz(c.hist), exam:tz(c.exam), ddx:c.ddx.map(tz), explain:tz(c.explain),
+    labs:c.labs.map(l=>[tz(l[0]), tzu(tz(l[1])), l[2]])};
+}
+/* нормы ЧСС/ЧДД по возрасту (у детей «взрослые» пороги вводят в заблуждение) */
+function vitAbn(c){
+  const ay = caseAge(c), v = c.vitals;
+  const n = ay < 1 ? {hr:[100,160], rr:[30,60]} : ay < 6 ? {hr:[80,140], rr:[20,40]} : ay < 13 ? {hr:[70,120], rr:[16,30]} : {hr:[55,100], rr:[10,20]};
+  const m = /^(\d+)\s*\/\s*(\d+)/.exec(String(v.bp || '')), sys = m ? +m[1] : null, dia = m ? +m[2] : null;
+  /* дети: гипотензия — САД < 70 + 2×возраст; ориентир верхней границы — САД ≥110 + 2×возраст или ДАД ≥70 + возраст */
+  const bp = sys === null ? false : ay >= 13 ? (sys < 90 || sys >= 140 || dia >= 90)
+    : (sys < 70 + 2 * Math.floor(ay) || sys >= 110 + 2 * ay || dia >= 70 + ay);
+  return {bp, hr: v.hr < n.hr[0] || v.hr > n.hr[1], rr: v.rr < n.rr[0] || v.rr > n.rr[1], t: v.t > 37, spo2: v.spo2 < 94};
+}
+const shuffle = a => a.map(x => [Math.random(), x]).sort((p, q) => p[0] - q[0]).map(x => x[1]);
+let patGroup = 'all';
 ROUTES.patient = function(){
+  const n = allCases().filter(c => patGroup === 'all' || caseGroup(c) === patGroup).length;
   return head(t('nav_patient'), t('pat_hint')) + `
   <div class="card" style="text-align:center">
+    <div class="chiprow pt-groups" id="pt-groups">${['all', ...CASE_GROUPS].map(g=>`<button class="chip ${patGroup===g?'on':''}" data-g="${g}">${g==='all'?t('all'):t('pat_g_'+g)}</button>`).join('')}</div>
     <button class="btn" id="pt-new" style="font-size:1rem">${ic('dice')} ${t('pat_new')}</button>
-    <p class="muted" style="margin:8px 0 0;font-size:.85rem">${t('pat_stats')}: <b>${S.patient.solved}</b> ${t('solved')} / <b>${S.patient.attempted}</b> ${t('attempted')}</p>
+    <p class="muted" style="margin:8px 0 0;font-size:.85rem">${t('pat_stats')}: <b>${S.patient.solved}</b> ${t('solved')} / <b>${S.patient.attempted}</b> ${t('attempted')}
+      · ${t('pat_in_base')}: <b id="pt-count">${n}</b></p>
   </div>
   <div id="pt-case"></div>`;
 };
 ROUTES.patient.after = function(){
   let cur = null;
+  if (!CasesMore.ready()) CasesMore.load().then(()=>{ if (currentRoute==='patient' && CasesMore.ready() && !$('#pt-case').innerHTML.trim()) go('patient'); });
+  $$('#pt-groups [data-g]').forEach(b=>b.onclick=()=>{ patGroup = b.dataset.g;
+    $$('#pt-groups [data-g]').forEach(x=>x.classList.toggle('on', x===b));
+    $('#pt-count').textContent = allCases().filter(c => patGroup === 'all' || caseGroup(c) === patGroup).length; });
   $('#pt-new').onclick = ()=>{ Ausc.stop(); ECGRen.stop();
-    cur = window.CASES[Math.floor(Math.random()*window.CASES.length)];
+    let pool = allCases().filter(c => patGroup === 'all' || caseGroup(c) === patGroup);
+    if (pool.length > 1 && cur) pool = pool.filter(c => c !== cur);          // не повторять подряд
+    cur = pool[Math.floor(Math.random()*pool.length)];
     renderCase(cur);
   };
   function renderCase(c){
-    const others = window.CASES.filter(x=>x.dx!==c.dx).sort(()=>Math.random()-0.5).slice(0,5).map(x=>x.dx);
-    const opts = [c.dx, ...others].sort(()=>Math.random()-0.5);
+    /* варианты диагноза: сначала из того же направления — так сложнее угадать */
+    const others = allCases().filter(x => x !== c && x.dx !== c.dx);
+    const same = shuffle(others.filter(x => caseGroup(x) === caseGroup(c))).slice(0, 3);
+    const rest = shuffle(others.filter(x => !same.includes(x))).slice(0, 5 - same.length);
+    const opts = shuffle([c, ...same, ...rest]);
+    const L = cL(c), ab = vitAbn(c), ay = caseAge(c);
     const sexL = c.sex === 'Ж' ? t('sex_f') : t('sex_m');
     const vt = c.vitals;
     $('#pt-case').innerHTML = `
     <div class="entry">
-      <div class="meta"><span class="badge">${t('pat_age')}: ${c.age}</span><span class="badge">${sexL}</span></div>
-      <p><b>${t('pat_cc')}:</b> ${esc(tz(c.cc))}</p>
-      <p><b>${t('pat_hist')}:</b> ${esc(tz(c.hist))}</p>
-      <p><b>${t('pat_exam')}:</b> ${esc(tz(c.exam))}</p>
+      <div class="meta"><span class="badge">${t('pat_g_'+caseGroup(c))}</span><span class="badge">${t('pat_age')}: ${esc(L.age)}</span><span class="badge">${sexL}</span></div>
+      <p><b>${t('pat_cc')}:</b> ${esc(L.cc)}</p>
+      <p><b>${t('pat_hist')}:</b> ${esc(L.hist)}</p>
+      <p><b>${t('pat_exam')}:</b> ${esc(L.exam)}</p>
       <h3>${t('pat_vitals')}</h3>
       <div class="vitals">
-        <div class="vital"><div class="v">${vt.bp}</div><div class="l">${t('vit_bp')}</div></div>
-        <div class="vital ${vt.hr>100||vt.hr<55?'abn':''}"><div class="v">${vt.hr}</div><div class="l">${t('vit_hr')}</div></div>
-        <div class="vital ${vt.rr>20?'abn':''}"><div class="v">${vt.rr}</div><div class="l">${t('vit_rr')}</div></div>
-        <div class="vital ${vt.t>37?'abn':''}"><div class="v">${vt.t}</div><div class="l">t°C</div></div>
-        <div class="vital ${vt.spo2<94?'abn':''}"><div class="v">${vt.spo2}%</div><div class="l">SpO₂</div></div>
+        <div class="vital ${ab.bp?'abn':''}"><div class="v">${esc(vt.bp)}</div><div class="l">${t('vit_bp')}</div></div>
+        <div class="vital ${ab.hr?'abn':''}"><div class="v">${vt.hr}</div><div class="l">${t('vit_hr')}</div></div>
+        <div class="vital ${ab.rr?'abn':''}"><div class="v">${vt.rr}</div><div class="l">${t('vit_rr')}</div></div>
+        <div class="vital ${ab.t?'abn':''}"><div class="v">${vt.t}</div><div class="l">t°C</div></div>
+        <div class="vital ${ab.spo2?'abn':''}"><div class="v">${vt.spo2}%</div><div class="l">SpO₂</div></div>
       </div>
+      ${ay < 13 ? `<p class="muted pt-norm">${ic('child')} ${t('pat_peds_norm')}</p>` : ''}
       <div class="sim-layout" style="margin-top:12px">
         <div>
           <h3>${ic('lungs')} ${t('nav_auscult')}</h3>
@@ -1979,9 +2028,9 @@ ROUTES.patient.after = function(){
         </div>
       </div>
       <h3>${t('pat_labs')}</h3>
-      <div class="table-wrap"><table><tbody>${c.labs.map(l=>`<tr class="lab-row"><td>${esc(tz(l[0]))}</td><td class="${l[2]?'':'abn'}">${esc(tzu(tz(l[1])))}</td></tr>`).join('')}</tbody></table></div>
+      <div class="table-wrap"><table><tbody>${L.labs.map(l=>`<tr class="lab-row"><td>${esc(l[0])}</td><td class="${l[2]?'':'abn'}">${esc(l[1])}</td></tr>`).join('')}</tbody></table></div>
       <h3 style="margin-top:14px">${t('pat_dx')}</h3>
-      <select id="pt-dx">${opts.map(o=>`<option value="${esc(o)}">${esc(tz(o))}</option>`).join('')}</select>
+      <select id="pt-dx">${opts.map(o=>`<option value="${esc(o.dx)}">${esc(cL(o).dx)}</option>`).join('')}</select>
       <p style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn" id="pt-check">${ic('check')} ${t('pat_submit')}</button>
         <button class="btn secondary" id="pt-reveal">${t('pat_reveal')}</button>
@@ -1989,7 +2038,8 @@ ROUTES.patient.after = function(){
       <div id="pt-verdict"></div>
     </div>`;
     $('#pt-sound').onclick = ()=>Ausc.play(window.SOUNDS.find(s=>s.id===c.sound).synth);
-    $('#pt-map').innerHTML = BodyMap.html('male', c.pain);
+    /* модель — по полу; детский режим уменьшает фигуру, а точки зон остаются на «взрослых» местах */
+    $('#pt-map').innerHTML = BodyMap.html(c.sex === 'Ж' ? 'female' : 'male', c.pain);
     BodyMap.bind($('#pt-map'), ()=>{});
     const pmini = $('#pt-map .body-photo'); if (pmini) pmini.classList.add('mini');   /* 2D-фолбэк карты — компактный */
     ECGRen.start($('#pt-ecg'), window.ECGS.find(e=>e.id===c.ecg), S.theme, 0.8);
@@ -2003,8 +2053,8 @@ ROUTES.patient.after = function(){
     };
     $('#pt-reveal').onclick = ()=>{ S.patient.attempted++; save(); $('#pt-verdict').innerHTML='<div id="pt-expl"></div>'; reveal(); };
     function reveal(){
-      $('#pt-expl').innerHTML = `<div class="card"><h3>${ic('check')} ${t('pat_showcase')}: ${esc(tz(c.dx))}</h3>
-        <p><b>${t('p_diff')}:</b> ${esc(c.ddx.map(tz).join('; '))}</p><p>${esc(tz(c.explain))}</p></div>`;
+      $('#pt-expl').innerHTML = `<div class="card"><h3>${ic('check')} ${t('pat_showcase')}: ${esc(L.dx)}</h3>
+        <p><b>${t('p_diff')}:</b> ${esc(L.ddx.join('; '))}</p><p>${esc(L.explain)}</p></div>`;
       $('#pt-verdict').parentElement.querySelectorAll('#pt-check,#pt-reveal').forEach(b=>b.disabled=true);
     }
   }
