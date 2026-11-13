@@ -141,6 +141,25 @@ tr:hover td{background:color-mix(in srgb,var(--panel2) 60%,transparent)}
 .t-grp{font-size:.74rem;text-transform:uppercase;letter-spacing:.04em;margin:2px 0 6px}
 .t-grp+.chiprow{margin-bottom:12px}
 #t-area{scroll-margin-top:72px}
+#t-area .meta{flex-wrap:wrap;align-items:center;row-gap:6px}
+#t-area .meta>*{white-space:nowrap}
+.t-nav{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.t-nav .btn:disabled{opacity:.45;cursor:default}
+.t-nav .t-stop{background:transparent;color:var(--danger);border:1px solid var(--danger)}
+.t-nav .t-stop:hover{background:var(--danger);color:#fff}
+.t-map{display:flex;flex-wrap:wrap;gap:5px;margin:0 0 10px}
+.t-dot{width:26px;height:26px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--muted);
+  font:600 .7rem/1 inherit;cursor:pointer;padding:0}
+.t-dot.cur{border-color:var(--accent);color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.t-dot.ok{background:color-mix(in srgb,var(--accent2) 22%,transparent);border-color:var(--accent2);color:var(--text)}
+.t-dot.bad{background:color-mix(in srgb,var(--danger) 20%,transparent);border-color:var(--danger);color:var(--text)}
+.t-expl{margin-top:8px;font-size:.88rem}
+.chip.t-opt:disabled{cursor:default;opacity:1}
+.chip.t-opt.on{background:color-mix(in srgb,var(--accent2) 20%,transparent);border-color:var(--accent2);color:var(--text)}
+.chip.t-opt.bad{background:color-mix(in srgb,var(--danger) 16%,transparent);border-color:var(--danger);color:var(--text)}
+@media (max-width:520px){ .t-nav .btn{flex:1 1 40%} .t-nav span{display:none} .t-nav .t-stop{flex-basis:100%} }
+/* в ночной теме accent2 ≈ warn — «верно» отдельным зелёным, как у оценок */
+[data-theme="night"] .t-dot.ok,[data-theme="night"] .chip.t-opt.on{background:color-mix(in srgb,#9cc46a 18%,transparent);border-color:#9cc46a}
 .chip.t-opt{width:100%;justify-content:flex-start;text-align:left;white-space:normal;height:auto;line-height:1.35;padding:9px 12px;border-radius:14px}
 
 /* ---------- calendar ---------- */
