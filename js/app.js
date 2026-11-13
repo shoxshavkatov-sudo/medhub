@@ -2038,8 +2038,8 @@ ROUTES.patient.after = function(){
       <div id="pt-verdict"></div>
     </div>`;
     $('#pt-sound').onclick = ()=>Ausc.play(window.SOUNDS.find(s=>s.id===c.sound).synth);
-    /* модель — по полу; детский режим уменьшает фигуру, а точки зон остаются на «взрослых» местах */
-    $('#pt-map').innerHTML = BodyMap.html(c.sex === 'Ж' ? 'female' : 'male', c.pain);
+    /* дети — уменьшенная фигура (точки зон масштабируются вместе с ней), взрослые — по полу */
+    $('#pt-map').innerHTML = BodyMap.html(ay < 13 ? 'child' : c.sex === 'Ж' ? 'female' : 'male', c.pain);
     BodyMap.bind($('#pt-map'), ()=>{});
     const pmini = $('#pt-map .body-photo'); if (pmini) pmini.classList.add('mini');   /* 2D-фолбэк карты — компактный */
     ECGRen.start($('#pt-ecg'), window.ECGS.find(e=>e.id===c.ecg), S.theme, 0.8);
