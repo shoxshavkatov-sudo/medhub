@@ -45,6 +45,7 @@ CDN Render (Cloudflare) кэширует файлы до часа и **не ра
 | `js/uz-data.js` | узбекский перевод содержимого разделов (предметы, навыки, анализы, калькуляторы, симуляторы, тесты, пациенты, карточки): словарь `UZT["русская строка"] = "o'zbekcha"`; грузится только при uz (`UzData`), подставляется через `tz()` в `js/app.js`. Меняешь русский текст в `data.js`/`data2.js` — поправь ключ здесь |
 | `js/glossary.js` | глоссарий: `e(категория, 'ключи RU', 'ключи UZ', 'определение RU', 'определение UZ')`; в справке термины подчёркиваются (`Gloss` в `js/app.js`), раздел «Глоссарий» |
 | `js/news.js` | новости: `addNews({date, title, text, image?, link?, pinned?})`; генератор кода — сайт с `?editor` |
+| `js/sims.js` | симуляторы: карта боли, аускультация (WebAudio), ЭКГ-монитор `ECGRen`. Ритм задаётся данными `ECGS` в `data2.js`: `p` — параметры кардиоцикла (`pAmp`, `pr`, `qrs`, `morph`: n/lbbb/rbbb/wpw/paced/pvc/lvh, `st`, `t`, `tInv`, `tPeak`, `u`, `qtc`) и режим ритма (`fWave`, `flutter`, `drop`, `wenck`, `dissociation`, `bigeminy`, `sinArr`, `torsades`, `chaotic`, `asystole`); `g` — группа в списке, `lead` — отведение. `ECGRen.sample(ритм, t0, t1)` даёт значения кривой — для проверки формы без монитора |
 | `js/liquid-dock.js`, `css/liquid-dock.css` | нижняя панель «Liquid Glass» |
 | `css/style.css` | все остальные стили; цвета — переменные на `:root` и `[data-theme="dark"|"night"]` |
 | `server.js` | Node-версия (группы между устройствами). **На проде не используется** — там статика |

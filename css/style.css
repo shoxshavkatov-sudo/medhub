@@ -137,6 +137,14 @@ tr:hover td{background:color-mix(in srgb,var(--panel2) 60%,transparent)}
 .comment{border-left:3px solid var(--line);padding:6px 10px;margin:8px 0 0;background:var(--panel2);border-radius:0 8px 8px 0;font-size:.86rem}
 .empty{color:var(--muted);text-align:center;padding:26px 10px;border:1px dashed var(--line);border-radius:var(--radius);background:var(--panel)}
 
+/* ---------- ECG ---------- */
+.ecg-list{margin-bottom:12px}
+.ecg-grp{margin-bottom:8px}
+.ecg-grp .t-grp{margin:0 0 5px}
+.ecg-tools{margin-top:4px}
+.ecg-sel{display:none}
+@media (max-width:640px){ .ecg-sel{display:block;width:100%;margin-bottom:8px} .ecg-grp{display:none} }
+
 /* ---------- random patient ---------- */
 .pt-groups{justify-content:center;margin-bottom:12px}
 .pt-norm{font-size:.78rem;margin:6px 0 0}
