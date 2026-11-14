@@ -173,30 +173,121 @@ window.ECGRen = (function(){
   let raf = null, halt = null;   // halt — остановить текущую развёртку (и rAF, и страхующий таймер)
 
   const G = (t, c, w, a) => a * Math.exp(-((t - c) * (t - c)) / (2 * w * w));
+  const sig = x => 1 / (1 + Math.exp(-x));
 
-  function makeBeatFn(p){
-    // возвращает f(tp мс от начала комплекса) -> мм
-    const pr = p.pr || 160, qd = 100;               // QRS длительность, мс
-    const qA = p.q ? -1.6 : -0.6;                   // амплитуда Q
-    const rA = p.wide ? 8.5 : 11;                   // амплитуда R
-    const sA = p.wide ? -4 : (p.q ? -3.2 : -2.4);   // амплитуда S
-    const rw = p.wide ? 16 : 7;                     // полуширина R
-    const st = p.st || 0;
-    const tA = (p.t || 0) * (p.tPeak ? 2 : 1) * 1.9;
-    const tW = p.wide ? 52 : 42;
-    const inv = p.tInv;
-    return tp => {
-      let y = 0;
-      if (p.pAmp > 0) y += G(tp, pr * .5, 26, p.pAmp);           // P
-      y += G(tp, qd * .30, rw * .55, qA);                        // Q
-      y += G(tp, qd * .45, rw, rA);                              // R
-      y += G(tp, qd * .68, rw * .7, sA);                         // S
-      y += st * (tp > qd * .9 && tp < qd * 2.4 ? 1 : 0) * G(tp, qd * 1.6, 60, 1); // ST
-      const tAmp = inv ? -Math.abs(tA || 2.4) : tA;
-      if (p.t !== 0) y += G(tp, qd * 2.1, tW, tAmp);             // T
-      return y;
+  /* Один кардиоцикл; tp — мс от начала цикла (начало P), амплитуды — условные мм.
+     p: pAmp, pr (P→QRS, мс), qrs (мс), morph (n | lbbb | rbbb | wpw | paced | pvc | lvh), q (патологический Q),
+        st (смещение ST), concave, prDown (депрессия PR), t (амплитуда T; <0 — отрицательный), tInv, tPeak,
+        u (волна U), qtc (с; по умолчанию 0.41). o: rr (мс — для QT по Базетту), noP, pr, pOnly (только P). */
+  function makeBeat(p, o){
+    o = o || {};
+    const hasP = !o.noP && p.pAmp > 0;
+    const morph = o.morph || p.morph || (p.wide ? 'pvc' : 'n');
+    const qd = p.qrs || 90;
+    const q0 = hasP ? (o.pr || p.pr || 160) : 30;                 // начало QRS от начала цикла
+    const qt = (p.qtc || .41) * 1000 * Math.sqrt((o.rr || 800) / 1000);
+    const tW = p.tPeak ? 24 : (qd > 120 ? 50 : 42);
+    const tC = q0 + Math.max(qt - tW * 1.7, qd + 90);              // вершина T
+    let tA = (p.t === undefined ? 3 : p.t) * 1.9;
+    if (p.tInv) tA = -Math.abs(tA || 4.5);
+    const st = p.st || 0, jPt = q0 + qd;
+    const parts = {                                                // [доля qd, ширина (доля qd), амплитуда]
+      lbbb:  [[.34,.14,8.5],[.66,.14,9.5]],                       // широкий зазубренный R (V6)
+      rbbb:  [[.14,.07,3],[.36,.09,-5.5],[.68,.12,10]],             // rSR' (V1)
+      wpw:   [[.28,.17,4.4],[.55,.09,9],[.80,.08,-2.2]],            // дельта-волна + R
+      paced: [[.30,.15,-3],[.62,.18,-9.5]],                       // стимуляция верхушки ПЖ (II)
+      pvc:   [[.42,.17,13],[.82,.12,-2]],                         // широкий «уродливый» комплекс
+      lvh:   [[.18,.07,-.8],[.42,.10,23],[.68,.09,-4]]             // высокий R (V5)
+    }[morph] || [[.18,.07,p.q ? -2.6 : -.7],[.42,.10,11],[.68,.09,p.q ? -3.4 : -2.4]];
+    if (o.pOnly) return {len: 140, rAt: null, fn: tp => G(tp, 50, 20, p.pAmp)};
+    return {
+      rAt: q0 + qd * .42,
+      len: Math.max(tC + tW * 3 + (p.u ? 260 : 0), q0 + qd + 200),
+      fn: tp => {
+        let y = 0;
+        if (hasP) y += G(tp, 50, 20, p.pAmp);                                           // P
+        if (hasP && p.prDown) y -= 1.1 * sig((tp - 90) / 6) * sig((q0 - 6 - tp) / 4);   // депрессия PR
+        if (morph === 'paced') y += G(tp, q0 - 4, 1.3, 17);                             // спайк ЭКС
+        for (const [c, w, a] of parts) y += G(tp, q0 + qd * c, Math.max(qd * w, 3), a);
+        if (st) y += st * sig((tp - jPt) / (p.concave ? 14 : 5)) * sig((tC + tW * .6 - tp) / 22);   // ST
+        if (tA) y += G(tp, tC, tW, tA);                                                 // T
+        if (p.u) y += G(tp, tC + 160, 36, p.u);                                         // U
+        return y;
+      }
     };
   }
+
+  /* Сигнал ритма: yAt(t) — значение кривой (усл. мм) в момент t мс; beatsBetween — сколько «R» прошло;
+     отдельно от монитора, чтобы ритм можно было проверить без развёртки (ECGRen.sample) */
+  function makeSignal(rhythm){
+  const p0 = Object.assign({}, rhythm.p || {});
+  if (rhythm.id === 'pericard'){ p0.st = p0.st || 1.6; p0.pAmp = p0.pAmp || 1.2; }
+  const mode = p0.chaotic ? 'vf' : p0.torsades ? 'tdp' : p0.asystole ? 'asys' : p0.fWave ? 'af' : p0.flutter ? 'fl'
+    : p0.dissociation ? 'chb' : p0.wenck ? 'wenck' : p0.drop ? 'mob2' : p0.bigeminy ? 'big' : p0.sinArr ? 'sarr' : 'reg';
+  const baseRate = rhythm.rate || 75, RR = 60000 / Math.max(baseRate, 1);
+  const pvcP = {pAmp: 0, qrs: 150, morph: 'pvc', st: -1.2, t: -2.6};
+
+  // расписание кардиоциклов: {at, len, rAt (время «R» для бипа) , fn}
+  let beats = [], nextAt = 300, k = 0;
+  const add = (at, b) => beats.push({at, len: b.len, rAt: b.rAt === null ? null : at + b.rAt, fn: b.fn});
+  function schedule(t){
+    while (nextAt < t + 4000){
+      if (mode === 'af'){ const rr = 320 + Math.random() * 480; add(nextAt, makeBeat(p0, {noP: true, rr})); nextAt += rr; }
+      else if (mode === 'fl'){ const rr = 200 * (p0.cond || 2); add(nextAt, makeBeat(p0, {noP: true, rr})); nextAt += rr; }
+      else if (mode === 'chb'){ add(nextAt, makeBeat(p0, {noP: true, rr: RR})); nextAt += RR; }
+      else if (mode === 'mob2' || mode === 'wenck'){
+        const pp = 60000 / (p0.atrial || baseRate * 4 / 3), i = k % 4;      // группы по 4 P: 4:3
+        if (i === 3) add(nextAt, makeBeat(p0, {pOnly: true}));                // P без QRS
+        else add(nextAt, makeBeat(p0, {rr: pp, pr: mode === 'wenck' ? [160, 250, 320][i] : p0.pr}));
+        nextAt += pp;
+      }
+      else if (mode === 'big'){                                            // норма + экстрасистола, компенсаторная пауза
+        add(nextAt, makeBeat(p0, {rr: RR}));
+        add(nextAt + (p0.pr || 160) - 30 + RR * .58, makeBeat(pvcP, {rr: RR}));
+        nextAt += RR * 2;
+      }
+      else if (mode === 'sarr'){                                           // ЧСС меняется в такт дыханию (~4 с)
+        const rr = RR * (1 + .22 * Math.sin(nextAt * 2 * Math.PI / 4200)); add(nextAt, makeBeat(p0, {rr})); nextAt += rr;
+      }
+      else { add(nextAt, makeBeat(p0, {rr: RR})); nextAt += RR; }
+      k++;
+    }
+    beats = beats.filter(b => b.at + b.len > t - 3000);
+  }
+
+  function yAt(t){
+    // значение кривой (усл. мм) в момент t (мс симуляции)
+    if (mode === 'vf'){
+      return Math.sin(t * .021) * 3.4 * Math.sin(t * .0053 + 1.7)
+           + Math.sin(t * .043 + 2.1) * 2.2 * Math.sin(t * .011)
+           + Math.sin(t * .093) * 1.1;
+    }
+    if (mode === 'asys') return .35 * Math.sin(t * .0019) + .12 * Math.sin(t * .011);
+    if (mode === 'tdp'){                                                   // «пируэт»: амплитуда и полярность волнообразно
+      const env = Math.sin(t * 2 * Math.PI / 2600), ph = t * 2 * Math.PI / 240;
+      return 9.5 * env * (Math.sin(ph) + .35 * Math.sin(2 * ph + .7)) + 1.1 * Math.sin(t * .004);
+    }
+    schedule(t);
+    let y = 0;
+    if (mode === 'af') y += Math.sin(t * .085) * .5 + Math.sin(t * .147 + 1.3) * .35;   // волны f
+    if (mode === 'fl'){ const f = (t % 200) / 200; y += f < .8 ? 2.6 - 6.5 * f : -2.6 + 26 * (f - .8); }   // «пила» F
+    if (mode === 'chb' && p0.pAmp > 0) y += G((t + 260) % 750, 50, 20, p0.pAmp);          // свои P (80/мин)
+    for (const b of beats) if (t >= b.at && t < b.at + b.len) y += b.fn(t - b.at);       // соседние циклы складываются
+    return y;
+  }
+  /* бип и пульс сердца — по времени «R», а не по высоте зубца (высокий T не считается) */
+  function beatsBetween(t1, t2){
+    if (mode === 'tdp') return Math.floor(t2 / 240) - Math.floor(t1 / 240);
+    if (mode === 'vf' || mode === 'asys') return 0;
+    let n = 0; for (const b of beats) if (b.rAt !== null && b.rAt > t1 && b.rAt <= t2) n++;
+    return n;
+  }
+
+    return {yAt, beatsBetween, schedule, mode};
+  }
+  /* значения кривой на отрезке — для проверки формы ритма */
+  function sample(rhythm, t0, t1, step){ const sg = makeSignal(rhythm), out = [];
+    for (let t = t0; t <= t1; t += step || 4) out.push(sg.yAt(t)); return out; }
 
   function start(canvas, rhythm, theme, speed, onBeat){
     stop();
@@ -230,37 +321,12 @@ window.ECGRen = (function(){
     const traceCol = night ? '#ffb45e' : dark ? '#5ee0a0' : '#19c37d';
     const glowCol  = night ? 'rgba(255,170,90,.9)' : dark ? 'rgba(94,224,160,.9)' : 'rgba(25,195,125,.9)';
 
-    const p0 = Object.assign({}, rhythm.p || {});
-    if (rhythm.id === 'pericard'){ p0.st = 1.6; p0.pAmp = p0.pAmp || 1.2; }
-    const chaotic = p0.chaotic;         // ФЖ
-    const dissoc = p0.dissociation;     // полная АВ-блокада
-    const fWave = p0.fWave;             // ФП
-    const drop = p0.drop;               // Мобиц II
-    const baseRate = rhythm.rate || 75;
-    let beatFn = makeBeatFn(p0);
-
-    // расписание комплексов
-    let beats = [];            // {at, rr, skipQRS, fn}
-    let tSim = 0, nextAt = 400, beatIdx = 0, lastR = -1;
-    function schedule(t){
-      while (nextAt < t + 4000){
-        let rr;
-        if (fWave) rr = 320 + Math.random() * 480;                       // абс. аритмия
-        else rr = 60000 / baseRate;
-        const skip = drop && (beatIdx % 4 === 2);                        // Мобиц II 3:2→4:3-иш
-        const fn = makeBeatFn(p0);
-        beats.push({at: nextAt, rr, skipQRS: skip, fn});
-        if (!skip) nextAt += rr; else nextAt += rr * 1.15;
-        beatIdx++;
-      }
-      beats = beats.filter(b => b.at > t - 3000);
-    }
-
-    const mm = v => v * 1.7;
+    const sg = makeSignal(rhythm), mode = sg.mode, yAt = sg.yAt, schedule = sg.schedule, beatsBetween = sg.beatsBetween;
+    const mm = v => v * 2.4;
     let sx = 0, lastY = 0, prev = null, Tsim = 0;
     const V = 130;                       // скорость развёртки, px/с
     const GAP = 26;                      // стирающая полоса
-    let beepOn = false, lastBeepT = 0;
+    let beepOn = false;
 
     function beep(){
       if (!beepOn) return;
@@ -276,36 +342,6 @@ window.ECGRen = (function(){
         o.connect(g); g.connect(ac.destination);
         o.start(); o.stop(ac.currentTime + .1);
       }catch(e){}
-    }
-
-    function yAt(t){
-      // значение кривой (мм) в момент t (мс симуляции)
-      if (chaotic){
-        return Math.sin(t * .021) * 3.4 * Math.sin(t * .0053 + 1.7)
-             + Math.sin(t * .043 + 2.1) * 2.2 * Math.sin(t * .011)
-             + Math.sin(t * .093) * 1.1;
-      }
-      schedule(t);
-      let y = 0;
-      // предсердная активность
-      if (dissoc){
-        const pr = 950;
-        const tp = t % pr;
-        if (p0.pAmp > 0) y += G(tp, pr * .45, 26, p0.pAmp);
-      } else if (fWave){
-        y += Math.sin(t * .085) * .5 + Math.sin(t * .147 + 1.3) * .35;
-      } else if (drop){
-        // P рисуется на все комплексы (даже выпавшие)
-      }
-      // желудочный комплекс
-      for (let i = beats.length - 1; i >= 0; i--){
-        const b = beats[i];
-        if (t >= b.at && t < b.at + b.rr + 200){
-          if (!b.skipQRS) y += b.fn(t - b.at);
-          break;
-        }
-      }
-      return y;
     }
 
     let pending = false, kicker = null, alive = true;
@@ -327,10 +363,9 @@ window.ECGRen = (function(){
       let dt = (ts - prev) / 1000; prev = ts;
       if (dt > .12) dt = .12;
       dt *= speed;
-      Tsim += 0; // (время уже растёт выше)
-      const dx = V * dt;
+      const dx = V * dt, tPrev = Tsim;
       Tsim += dt * 1000;
-      schedule(Tsim);
+      if (mode !== 'vf' && mode !== 'asys' && mode !== 'tdp') schedule(Tsim);
       let x1 = sx, x2 = sx + dx;
       if (x2 >= W){ x2 = W; sx = 0; } else sx = x2;
       // пишем новый сегмент следа (непрерывное время!)
@@ -347,8 +382,7 @@ window.ECGRen = (function(){
         lastY = y;
       }
       pctx.stroke();
-      // «бип» на пересечении R (грубая эвристика: резкий пик в последней точке)
-      if (lastY > 6 && Tsim - lastBeepT > .25){ beep(); lastBeepT = Tsim; if (onBeat) onBeat(); }
+      if (beatsBetween(tPrev, Tsim) > 0){ beep(); if (onBeat) onBeat(); }
       // стирающая полоса впереди головки
       pctx.save();
       pctx.globalCompositeOperation = 'destination-out';
@@ -375,6 +409,8 @@ window.ECGRen = (function(){
       ctx.fillStyle = night ? '#ffb45e' : dark ? '#5ee0a0' : '#19c37d';
       ctx.beginPath(); ctx.arc(hx, hy, 2.2, 0, 7); ctx.fill();
       ctx.restore();
+      ctx.font = '600 13px system-ui, sans-serif'; ctx.fillStyle = traceCol; ctx.globalAlpha = .75;
+      ctx.fillText(rhythm.lead || 'II', 10, 20); ctx.globalAlpha = 1;      // отведение
       } catch(err){ window.__ecgErr = String(err && err.message || err).slice(0,250); }
       pending = false;
       kick();
@@ -389,7 +425,7 @@ window.ECGRen = (function(){
   /* раньше отменялся только rAF, а страхующий setTimeout перезапускал цикл —
      «невидимые» развёртки копились с каждым ритмом/пациентом */
   function stop(){ if (halt){ halt(); halt = null; } else if (raf){ cancelAnimationFrame(raf); raf = null; } }
-  return {start, stop, W, H};
+  return {start, stop, sample, W, H};
 })();
 
 /* ================= 4. ATLAS SCHEMATIC DRAWINGS ================= */

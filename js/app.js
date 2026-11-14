@@ -30,7 +30,7 @@ window.LANG = S.lang;
    Данные (предметы, анализы, калькуляторы, симуляторы, тесты, пациенты) хранятся по-русски.
    При языке uz словарь UZT подгружается до отрисовки раздела (go ждёт его), tz(строка) отдаёт перевод
    или ту же строку — значения в селектах и сохранённых записях остаются русскими. */
-const UZ_DATA_V = '20261112c';
+const UZ_DATA_V = '20261114a';
 const UzData = (function(){
   let p = null;
   const need = () => S.lang === 'uz' && !window.UZT;
@@ -1810,13 +1810,27 @@ ROUTES.auscult.after = function(){
 
 /* ---------- ECG ---------- */
 let ecgQuiz = null;
+/* группы ритмов в списке (поле g в ECGS) */
+const ECG_GROUPS = ['norm', 'tachy', 'brady', 'cond', 'isch', 'lyte', 'arrest'];
+const ecgGroup = r => t('ecg_g_' + (r.g || 'norm'));
+/* порядок внутри групп — по смыслу (от простого к сложному); неизвестные — в конец */
+const ECG_ORDER = ['sinus','sarr','stach','svt','afib','aflutter','pvcbig','vt','tdp','sbrady','junct','avb1','mobitz1',
+  'mobitz2','chb3','paced','rbbb','lbbb','wpw','lvh','stemi','nstemi','pericard','hyperk','hypok','lqt','vfib','asys'];
+const ecgList = g => window.ECGS.filter(e=>(e.g||'norm')===g)
+  .sort((a,b)=>((ECG_ORDER.indexOf(a.id)+1)||99)-((ECG_ORDER.indexOf(b.id)+1)||99));
 ROUTES.ecg = function(){
   ecgQuiz = null;
   return head(t('nav_ecg'), t('ecg_hint')) + `
-  <div class="chiprow" id="ecg-list">
-    ${window.ECGS.map(e=>`<button class="chip" data-e="${e.id}">${esc(tz(e.n))}</button>`).join('')}
-    <button class="chip" id="ecg-quiz-start">${ic('dice')} ${t('ecg_quiz')}</button>
-    <button class="chip" id="ecg-snd">${ic('headphones')} ${t('snd_off')}</button>
+  <div id="ecg-list" class="ecg-list">
+    <select id="ecg-sel" class="ecg-sel" aria-label="${esc(t('nav_ecg'))}">${ECG_GROUPS.map(g=>{ const list = ecgList(g); return list.length ?
+      `<optgroup label="${esc(t('ecg_g_'+g))}">${list.map(e=>`<option value="${e.id}">${esc(tz(e.n))}</option>`).join('')}</optgroup>` : ''; }).join('')}</select>
+    ${ECG_GROUPS.map(g=>{ const list = ecgList(g); return list.length ? `<div class="ecg-grp">
+      <div class="t-grp muted">${t('ecg_g_'+g)}</div>
+      <div class="chiprow">${list.map(e=>`<button class="chip" data-e="${e.id}">${esc(tz(e.n))}</button>`).join('')}</div></div>` : ''; }).join('')}
+    <div class="chiprow ecg-tools">
+      <button class="chip" id="ecg-quiz-start">${ic('dice')} ${t('ecg_quiz')}</button>
+      <button class="chip" id="ecg-snd">${ic('headphones')} ${t('snd_off')}</button>
+    </div>
   </div>
   <div class="canvas-wrap"><canvas id="ecg-cv"></canvas>
     <div class="ecg-hud" id="ecg-hud"><span class="ecg-heart">${ic('heart')}</span><b>—</b><small>${t('ecg_rate')}</small></div>
@@ -1839,14 +1853,17 @@ ROUTES.ecg.after = function(){
     const hud = $('#ecg-hud');
     hud.querySelector('b').textContent = r.rate || '--';
     $('#ecg-info').innerHTML = `<div class="card">
-      <div class="meta"><span class="badge">${esc(tz(r.cat))}</span> <span class="badge">${t('ecg_rate')}: ${r.rate||'—'}</span></div>
+      <div class="meta"><span class="badge">${esc(ecgGroup(r))}</span> <span class="badge">${t('ecg_rate')}: ${r.rate||'—'}</span>${r.lead?` <span class="badge">${t('ecg_lead')} ${esc(r.lead)}</span>`:''}</div>
       <h3>${esc(tz(r.n))}</h3>
       <p>${esc(tz(r.findings))}</p>
       <h3 style="font-size:.9rem;color:var(--muted)">${t('ecg_steps')}</h3>
       <table><tbody>${r.steps.map(s=>`<tr><td style="width:140px"><b>${esc(tz(s[0]))}</b></td><td>${esc(tz(s[1]))}</td></tr>`).join('')}</tbody></table>
     </div>`;
   };
-  $$('#ecg-list [data-e]').forEach(b=>b.onclick=()=>{ ecgQuiz=null; show(window.ECGS.find(e=>e.id===b.dataset.e)); });
+  const mark = id => { $$('#ecg-list [data-e]').forEach(x=>x.classList.toggle('on', x.dataset.e===id)); $('#ecg-sel').value = id; };
+  /* на телефоне — выпадающий список вместо 28 кнопок */
+  $('#ecg-sel').onchange = e => { ecgQuiz=null; mark(e.target.value); show(window.ECGS.find(r=>r.id===e.target.value)); };
+  $$('#ecg-list [data-e]').forEach(b=>b.onclick=()=>{ ecgQuiz=null; mark(b.dataset.e); show(window.ECGS.find(e=>e.id===b.dataset.e)); });
   $('#ecg-quiz-start').onclick = ()=>{ ecgQuiz = window.ECGS[Math.floor(Math.random()*window.ECGS.length)];
     ECGRen.start(cv, ecgQuiz, S.theme);
     $('#ecg-info').innerHTML = `<div class="card"><h3>${ic('info')} ${t('ecg_quiz')}</h3>
@@ -1877,7 +1894,7 @@ ROUTES.ecg.after = function(){
       this.innerHTML='⏸ '+t('ecg_pause');
     }
   };
-  show(window.ECGS[0]);
+  mark(window.ECGS[0].id); show(window.ECGS[0]);
 };
 
 /* ---------- ATLAS ---------- */
